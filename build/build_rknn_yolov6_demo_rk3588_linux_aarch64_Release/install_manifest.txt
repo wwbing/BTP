@@ -1,0 +1,5 @@
+/home/cat/wwbing/Code/Project/BTP/install/rk3588_linux_aarch64/rknn_yolov6_demo/./rknn_yolov6_demo
+/home/cat/wwbing/Code/Project/BTP/install/rk3588_linux_aarch64/rknn_yolov6_demo/model/neu-det_6_labels_list.txt
+/home/cat/wwbing/Code/Project/BTP/install/rk3588_linux_aarch64/rknn_yolov6_demo/model/neu-det-new.rknn
+/home/cat/wwbing/Code/Project/BTP/install/rk3588_linux_aarch64/rknn_yolov6_demo/lib/librknnrt.so
+/home/cat/wwbing/Code/Project/BTP/install/rk3588_linux_aarch64/rknn_yolov6_demo/lib/librga.so

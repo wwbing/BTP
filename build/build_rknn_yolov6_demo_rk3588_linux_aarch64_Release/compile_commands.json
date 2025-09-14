@@ -1,0 +1,37 @@
+[
+{
+  "directory": "/home/cat/wwbing/Code/Project/BTP/build/build_rknn_yolov6_demo_rk3588_linux_aarch64_Release",
+  "command": "/usr/bin/aarch64-linux-gnu-g++  -I/home/cat/wwbing/Code/Project/BTP/rknn_infer/src -I/home/cat/wwbing/Code/Project/BTP/rknn_infer/include -I/home/cat/wwbing/Code/Project/BTP/3rdparty/rknpu2/include -I/home/cat/wwbing/Code/Project/BTP/rknn_infer/utils -I/home/cat/wwbing/Code/Project/BTP/3rdparty/stb_image -I/home/cat/wwbing/Code/Project/BTP/3rdparty/librga/include -I/home/cat/wwbing/Code/Project/BTP/3rdparty/jpeg_turbo/include -O3 -DNDEBUG -o CMakeFiles/rknn_yolov6_demo.dir/src/main.cc.o -c /home/cat/wwbing/Code/Project/BTP/rknn_infer/src/main.cc",
+  "file": "/home/cat/wwbing/Code/Project/BTP/rknn_infer/src/main.cc"
+},
+{
+  "directory": "/home/cat/wwbing/Code/Project/BTP/build/build_rknn_yolov6_demo_rk3588_linux_aarch64_Release",
+  "command": "/usr/bin/aarch64-linux-gnu-g++  -I/home/cat/wwbing/Code/Project/BTP/rknn_infer/src -I/home/cat/wwbing/Code/Project/BTP/rknn_infer/include -I/home/cat/wwbing/Code/Project/BTP/3rdparty/rknpu2/include -I/home/cat/wwbing/Code/Project/BTP/rknn_infer/utils -I/home/cat/wwbing/Code/Project/BTP/3rdparty/stb_image -I/home/cat/wwbing/Code/Project/BTP/3rdparty/librga/include -I/home/cat/wwbing/Code/Project/BTP/3rdparty/jpeg_turbo/include -O3 -DNDEBUG -o CMakeFiles/rknn_yolov6_demo.dir/src/postprocess.cc.o -c /home/cat/wwbing/Code/Project/BTP/rknn_infer/src/postprocess.cc",
+  "file": "/home/cat/wwbing/Code/Project/BTP/rknn_infer/src/postprocess.cc"
+},
+{
+  "directory": "/home/cat/wwbing/Code/Project/BTP/build/build_rknn_yolov6_demo_rk3588_linux_aarch64_Release",
+  "command": "/usr/bin/aarch64-linux-gnu-g++  -I/home/cat/wwbing/Code/Project/BTP/rknn_infer/src -I/home/cat/wwbing/Code/Project/BTP/rknn_infer/include -I/home/cat/wwbing/Code/Project/BTP/3rdparty/rknpu2/include -I/home/cat/wwbing/Code/Project/BTP/rknn_infer/utils -I/home/cat/wwbing/Code/Project/BTP/3rdparty/stb_image -I/home/cat/wwbing/Code/Project/BTP/3rdparty/librga/include -I/home/cat/wwbing/Code/Project/BTP/3rdparty/jpeg_turbo/include -O3 -DNDEBUG -o CMakeFiles/rknn_yolov6_demo.dir/src/rknpu2/yolov6.cc.o -c /home/cat/wwbing/Code/Project/BTP/rknn_infer/src/rknpu2/yolov6.cc",
+  "file": "/home/cat/wwbing/Code/Project/BTP/rknn_infer/src/rknpu2/yolov6.cc"
+},
+{
+  "directory": "/home/cat/wwbing/Code/Project/BTP/build/build_rknn_yolov6_demo_rk3588_linux_aarch64_Release/utils.out",
+  "command": "/usr/bin/aarch64-linux-gnu-gcc -DLIBRGA_IM2D_HANDLE -I/home/cat/wwbing/Code/Project/BTP/rknn_infer/utils -O3 -DNDEBUG -o CMakeFiles/fileutils.dir/file_utils.c.o -c /home/cat/wwbing/Code/Project/BTP/rknn_infer/utils/file_utils.c",
+  "file": "/home/cat/wwbing/Code/Project/BTP/rknn_infer/utils/file_utils.c"
+},
+{
+  "directory": "/home/cat/wwbing/Code/Project/BTP/build/build_rknn_yolov6_demo_rk3588_linux_aarch64_Release/utils.out",
+  "command": "/usr/bin/aarch64-linux-gnu-gcc -DLIBRGA_IM2D_HANDLE -I/home/cat/wwbing/Code/Project/BTP/rknn_infer/utils -O3 -DNDEBUG -o CMakeFiles/imagedrawing.dir/image_drawing.c.o -c /home/cat/wwbing/Code/Project/BTP/rknn_infer/utils/image_drawing.c",
+  "file": "/home/cat/wwbing/Code/Project/BTP/rknn_infer/utils/image_drawing.c"
+},
+{
+  "directory": "/home/cat/wwbing/Code/Project/BTP/build/build_rknn_yolov6_demo_rk3588_linux_aarch64_Release/utils.out",
+  "command": "/usr/bin/aarch64-linux-gnu-gcc -DLIBRGA_IM2D_HANDLE -I/home/cat/wwbing/Code/Project/BTP/rknn_infer/utils -I/home/cat/wwbing/Code/Project/BTP/3rdparty/stb_image -I/home/cat/wwbing/Code/Project/BTP/3rdparty/librga/include -I/home/cat/wwbing/Code/Project/BTP/3rdparty/jpeg_turbo/include -O3 -DNDEBUG -o CMakeFiles/imageutils.dir/image_utils.c.o -c /home/cat/wwbing/Code/Project/BTP/rknn_infer/utils/image_utils.c",
+  "file": "/home/cat/wwbing/Code/Project/BTP/rknn_infer/utils/image_utils.c"
+},
+{
+  "directory": "/home/cat/wwbing/Code/Project/BTP/build/build_rknn_yolov6_demo_rk3588_linux_aarch64_Release/utils.out",
+  "command": "/usr/bin/aarch64-linux-gnu-gcc -DLIBRGA_IM2D_HANDLE -I/home/cat/wwbing/Code/Project/BTP/rknn_infer/utils -I/home/cat/wwbing/Code/Project/BTP/3rdparty/libsndfile/include -O3 -DNDEBUG -o CMakeFiles/audioutils.dir/audio_utils.c.o -c /home/cat/wwbing/Code/Project/BTP/rknn_infer/utils/audio_utils.c",
+  "file": "/home/cat/wwbing/Code/Project/BTP/rknn_infer/utils/audio_utils.c"
+}
+]

@@ -1,5 +1,5 @@
 # 构建产物目录
-build/
-install/
+build
+install
 
-.cache/
+.cache

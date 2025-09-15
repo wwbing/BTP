@@ -80,61 +80,32 @@ void MainWindow::setupUI()
     // 设置主窗口
     QWidget *centralWidget = new QWidget(this);
     setCentralWidget(centralWidget);
-    setMinimumSize(1000, 700);
+    setMinimumSize(800, 600);
 
     // 创建主布局
     QVBoxLayout *mainLayout = new QVBoxLayout(centralWidget);
-    mainLayout->setSpacing(20);
-    mainLayout->setContentsMargins(20, 20, 20, 20);
+    mainLayout->setSpacing(10);
+    mainLayout->setContentsMargins(10, 10, 10, 10);
 
-    // 创建标题区域
-    QWidget *titleWidget = new QWidget();
-    QVBoxLayout *titleLayout = new QVBoxLayout(titleWidget);
-    titleLayout->setContentsMargins(0, 0, 0, 0);
-
-    QLabel *titleLabel = new QLabel("RKNN 智能缺陷检测系统");
-    titleLabel->setAlignment(Qt::AlignCenter);
-    titleLabel->setStyleSheet("font-size: 24px; font-weight: bold; color: #2c3e50; margin: 10px;");
-
-    QLabel *subtitleLabel = new QLabel("基于 Rockchip NPU 的高性能检测平台");
-    subtitleLabel->setAlignment(Qt::AlignCenter);
-    subtitleLabel->setStyleSheet("font-size: 14px; color: #7f8c8d; margin-bottom: 10px;");
-
-    titleLayout->addWidget(titleLabel);
-    titleLayout->addWidget(subtitleLabel);
-
-    // 创建控制面板
-    QWidget *controlPanel = new QWidget();
-    controlPanel->setObjectName("controlPanel");
-    controlPanel->setStyleSheet(
-        "#controlPanel {"
-        "   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"
-        "   border-radius: 15px;"
-        "   padding: 20px;"
-        "}"
-    );
-
-    QVBoxLayout *controlLayout = new QVBoxLayout(controlPanel);
-    controlLayout->setSpacing(15);
-
-    // 按钮行布局
+    // 创建按钮布局
     QHBoxLayout *buttonLayout1 = new QHBoxLayout();
     QHBoxLayout *buttonLayout2 = new QHBoxLayout();
     QHBoxLayout *buttonLayout3 = new QHBoxLayout();
 
-    openButton = createStyledButton("📁 打开图片", "#3498db");
-    detectButton = createStyledButton("🔍 开始检测", "#e74c3c");
-    openFolderButton = createStyledButton("📂 选择文件夹", "#9b59b6");
-    batchDetectButton = createStyledButton("⚡ 批量检测", "#f39c12");
+    // 创建按钮
+    openButton = new QPushButton("打开图片");
+    detectButton = new QPushButton("开始检测");
+    openFolderButton = new QPushButton("选择文件夹");
+    batchDetectButton = new QPushButton("批量检测");
+    openVideoButton = new QPushButton("打开视频");
+    inferenceButton = new QPushButton("推理播放");
 
-    // 视频相关按钮
-    openVideoButton = createStyledButton("🎬 打开视频", "#27ae60");
-    inferenceButton = createStyledButton("🚀 推理播放", "#9b59b6");
-
+    // 设置按钮初始状态
     detectButton->setEnabled(false);
     batchDetectButton->setEnabled(false);
     inferenceButton->setEnabled(false);
 
+    // 添加按钮到布局
     buttonLayout1->addWidget(openButton);
     buttonLayout1->addWidget(detectButton);
     buttonLayout2->addWidget(openFolderButton);
@@ -142,189 +113,60 @@ void MainWindow::setupUI()
     buttonLayout3->addWidget(openVideoButton);
     buttonLayout3->addWidget(inferenceButton);
 
-    buttonLayout1->setSpacing(20);
-    buttonLayout2->setSpacing(20);
-    buttonLayout3->setSpacing(15);
-
-    controlLayout->addLayout(buttonLayout1);
-    controlLayout->addLayout(buttonLayout2);
-    controlLayout->addLayout(buttonLayout3);
-
-    // 创建图像显示区域
-    QWidget *imageContainer = new QWidget();
-    imageContainer->setObjectName("imageContainer");
-    imageContainer->setStyleSheet(
-        "#imageContainer {"
-        "   background: #ffffff;"
-        "   border: 2px solid #ecf0f1;"
-        "   border-radius: 10px;"
-        "   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);"
-        "}"
-    );
-
-    QVBoxLayout *imageLayout = new QVBoxLayout(imageContainer);
-    imageLayout->setContentsMargins(15, 15, 15, 15);
+    buttonLayout1->setSpacing(10);
+    buttonLayout2->setSpacing(10);
+    buttonLayout3->setSpacing(10);
 
     // 创建堆叠布局，用于在图片和视频之间切换
     stackedLayout = new QStackedLayout();
 
+    // 创建图片显示标签
     imageLabel = new QLabel(this);
     imageLabel->setAlignment(Qt::AlignCenter);
-    imageLabel->setMinimumSize(800, 500);
-    imageLabel->setStyleSheet(
-        "QLabel {"
-        "   border: 2px dashed #bdc3c7;"
-        "   border-radius: 8px;"
-        "   background: #f8f9fa;"
-        "   color: #7f8c8d;"
-        "   font-size: 16px;"
-        "}"
-        "QLabel:!pixmap {"
-        "   qproperty-text: '请选择图片文件';"
-        "}"
-    );
+    imageLabel->setMinimumSize(640, 480);
+    imageLabel->setText("请选择图片文件");
+    imageLabel->setFrameStyle(QFrame::Box | QFrame::Sunken);
 
-    
     // 创建推理结果显示标签
     inferenceResultLabel = new QLabel(this);
     inferenceResultLabel->setAlignment(Qt::AlignCenter);
-    inferenceResultLabel->setMinimumSize(800, 500);
-    inferenceResultLabel->setStyleSheet(
-        "QLabel {"
-        "   border: 2px solid #3498db;"
-        "   border-radius: 8px;"
-        "   background: #f8f9fa;"
-        "   color: #7f8c8d;"
-        "   font-size: 16px;"
-        "}"
-        "QLabel:!pixmap {"
-        "   qproperty-text: '推理结果将在这里显示';"
-        "}"
-    );
+    inferenceResultLabel->setMinimumSize(640, 480);
+    inferenceResultLabel->setText("推理结果将在这里显示");
+    inferenceResultLabel->setFrameStyle(QFrame::Box | QFrame::Sunken);
 
     stackedLayout->addWidget(imageLabel);
     stackedLayout->addWidget(inferenceResultLabel);
-    imageLayout->addLayout(stackedLayout);
 
-    
     // 创建状态栏
-    QWidget *statusBar = new QWidget();
-    statusBar->setObjectName("statusBar");
-    statusBar->setStyleSheet(
-        "#statusBar {"
-        "   background: linear-gradient(90deg, #34495e 0%, #2c3e50 100%);"
-        "   border-radius: 8px;"
-        "   padding: 12px 20px;"
-        "}"
-    );
-
-    QHBoxLayout *statusLayout = new QHBoxLayout(statusBar);
-
+    QHBoxLayout *statusLayout = new QHBoxLayout();
     statusLabel = new QLabel("系统就绪 - 请选择图片文件");
-    statusLabel->setStyleSheet(
-        "color: #ecf0f1;"
-        "font-size: 14px;"
-        "font-weight: 500;"
-    );
-    statusLabel->setAlignment(Qt::AlignLeft);
-
-    // 添加推理状态信息
     inferenceStatusLabel = new QLabel("推理: 未启动");
-    inferenceStatusLabel->setStyleSheet(
-        "color: #3498db;"
-        "font-size: 12px;"
-        "font-weight: 500;"
-    );
-    inferenceStatusLabel->setAlignment(Qt::AlignCenter);
+    QLabel *versionLabel = new QLabel("v1.0 | RK3588");
 
-    // 添加右侧信息
-    QLabel *versionLabel = new QLabel("v1.0 | RK3588 多核心");
-    versionLabel->setStyleSheet(
-        "color: #95a5a6;"
-        "font-size: 12px;"
-    );
-    versionLabel->setAlignment(Qt::AlignRight);
-
-    statusLayout->addWidget(statusLabel, 2);
-    statusLayout->addWidget(inferenceStatusLabel, 1);
-    statusLayout->addWidget(versionLabel, 1);
+    statusLayout->addWidget(statusLabel);
+    statusLayout->addWidget(inferenceStatusLabel);
+    statusLayout->addWidget(versionLabel);
 
     // 添加所有组件到主布局
-    mainLayout->addWidget(titleWidget);
-    mainLayout->addWidget(controlPanel);
-    mainLayout->addWidget(imageContainer, 1);
-    mainLayout->addWidget(statusBar);
+    mainLayout->addLayout(buttonLayout1);
+    mainLayout->addLayout(buttonLayout2);
+    mainLayout->addLayout(buttonLayout3);
+    mainLayout->addLayout(stackedLayout, 1);
+    mainLayout->addLayout(statusLayout);
 
     // 连接信号槽
     connect(openButton, &QPushButton::clicked, this, &MainWindow::openImage);
     connect(detectButton, &QPushButton::clicked, this, &MainWindow::detectDefects);
     connect(openFolderButton, &QPushButton::clicked, this, &MainWindow::openFolder);
     connect(batchDetectButton, &QPushButton::clicked, this, &MainWindow::batchDetect);
-
-    // 视频相关信号槽连接
     connect(openVideoButton, &QPushButton::clicked, this, &MainWindow::openVideo);
     connect(inferenceButton, &QPushButton::clicked, this, &MainWindow::toggleVideoInference);
 
     // 设置窗口属性
-    setWindowTitle("RKNN 智能缺陷检测系统");
-    resize(1200, 800);
-
-    // 设置窗口样式
-    setStyleSheet(
-        "QMainWindow {"
-        "   background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);"
-        "}"
-        "QPushButton {"
-        "   font-size: 14px;"
-        "   font-weight: 600;"
-        "}"
-    );
+    setWindowTitle("RKNN 缺陷检测系统");
+    resize(800, 600);
 }
 
-QPushButton* MainWindow::createStyledButton(const QString &text, const QString &color)
-{
-    QPushButton *button = new QPushButton(text);
-    button->setFixedSize(180, 50);
-    button->setStyleSheet(
-        QString(
-        "QPushButton {"
-        "   background-color: %1;"
-        "   color: white;"
-        "   border: none;"
-        "   border-radius: 8px;"
-        "   padding: 12px 20px;"
-        "   font-size: 14px;"
-        "   font-weight: 600;"
-        "}"
-        "QPushButton:hover {"
-        "   background-color: %2;"
-        "   transform: translateY(-2px);"
-        "   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);"
-        "}"
-        "QPushButton:pressed {"
-        "   background-color: %3;"
-        "   transform: translateY(0px);"
-        "   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);"
-        "}"
-        "QPushButton:disabled {"
-        "   background-color: #bdc3c7;"
-        "   color: #7f8c8d;"
-        "}"
-        ).arg(color).arg(darkenColor(color, 20)).arg(darkenColor(color, 40))
-    );
-    return button;
-}
-
-QString MainWindow::darkenColor(const QString &color, int percent)
-{
-    QColor originalColor(color);
-    qreal h, s, v;
-    originalColor.getHsvF(&h, &s, &v);
-    v = qMax(0.0, v - (percent / 100.0));
-    QColor newColor;
-    newColor.setHsvF(h, s, v);
-    return newColor.name();
-}
 
 void MainWindow::initializeRKNN()
 {
@@ -359,7 +201,7 @@ void MainWindow::initializeRKNN()
     }
 
     rknn_initialized = true;
-    statusLabel->setText("✅ RKNN模型已加载 - 使用3个NPU核心并行处理");
+    statusLabel->setText("RKNN模型已加载");
     batchDetectButton->setEnabled(true);
 }
 
@@ -394,7 +236,7 @@ void MainWindow::loadImage(const QString &path)
                                        Qt::SmoothTransformation);
     imageLabel->setPixmap(scaledPixmap);
     detectButton->setEnabled(true);
-    statusLabel->setText(QString("📷 已加载: %1").arg(QFileInfo(path).fileName()));
+    statusLabel->setText(QString(" 已加载: %1").arg(QFileInfo(path).fileName()));
 }
 
 void MainWindow::detectDefects()
@@ -404,14 +246,14 @@ void MainWindow::detectDefects()
         return;
     }
 
-    statusLabel->setText("🔍 正在检测中，请稍候...");
+    statusLabel->setText("正在检测中，请稍候...");
     QApplication::processEvents();
 
     // 读取图片
     QImage inputImage(currentImagePath);
     if (inputImage.isNull()) {
         QMessageBox::warning(this, "错误", "无法读取图片文件");
-        statusLabel->setText("❌ 检测失败");
+        statusLabel->setText("检测失败");
         return;
     }
 
@@ -419,10 +261,10 @@ void MainWindow::detectDefects()
     QImage outputImage;
     if (runRKNNInference(inputImage, outputImage)) {
         displayResult(outputImage);
-        statusLabel->setText("✅ 检测完成");
+        statusLabel->setText("检测完成");
     } else {
         QMessageBox::warning(this, "错误", "RKNN推理失败");
-        statusLabel->setText("❌ 检测失败");
+        statusLabel->setText("检测失败");
     }
 }
 
@@ -554,7 +396,7 @@ void MainWindow::openFolder()
             return;
         }
 
-        statusLabel->setText(QString("📂 已选择文件夹: %1 (%2 张图片)").arg(QFileInfo(folderPath).fileName()).arg(imageFiles.size()));
+        statusLabel->setText(QString(" 已选择文件夹: %1 (%2 张图片)").arg(QFileInfo(folderPath).fileName()).arg(imageFiles.size()));
         currentFolderPath = folderPath; // 保存文件夹路径
 
         // 可选：显示文件夹中的第一张图片作为预览
@@ -622,7 +464,7 @@ void MainWindow::processFolder(const QString &folderPath)
     for (int i = 0; i < imageFiles.size(); ++i) {
         // 检查是否取消
         if (progressDialog.wasCanceled()) {
-            statusLabel->setText("⏹️ 批量检测已取消");
+            statusLabel->setText("批量检测已取消");
             break;
         }
 
@@ -634,7 +476,7 @@ void MainWindow::processFolder(const QString &folderPath)
         progressDialog.setLabelText(QString("正在处理: %1").arg(fileInfo.fileName()));
         QApplication::processEvents();
 
-        statusLabel->setText(QString("⚡ 正在处理 %1/%2: %3")
+        statusLabel->setText(QString(" 正在处理 %1/%2: %3")
                            .arg(i + 1)
                            .arg(imageFiles.size())
                            .arg(fileInfo.fileName()));
@@ -675,7 +517,7 @@ void MainWindow::processFolder(const QString &folderPath)
     progressDialog.setValue(imageFiles.size());
 
     // 显示最终结果
-    QString summary = QString("🎉 批量检测完成！成功: %1, 失败: %2").arg(successCount).arg(failCount);
+    QString summary = QString(" 批量检测完成！成功: %1, 失败: %2").arg(successCount).arg(failCount);
     statusLabel->setText(summary);
 
     QMessageBox::information(this, "批量检测完成", summary + QString("\n结果已保存到: %1").arg(outputDir));
@@ -747,7 +589,7 @@ void MainWindow::openVideo()
             }
         });
 
-        statusLabel->setText(QString("🎬 已加载视频: %1").arg(QFileInfo(fileName).fileName()));
+        statusLabel->setText(QString(" 已加载视频: %1").arg(QFileInfo(fileName).fileName()));
     }
 }
 
@@ -781,14 +623,12 @@ void MainWindow::startVideoInference()
     totalDetectionCount = 0;
 
     // 更新按钮状态
-    inferenceButton->setText("⏹️ 停止播放");
-    inferenceButton->setStyleSheet(inferenceButton->styleSheet().replace("#9b59b6", "#e74c3c"));
-
+    inferenceButton->setText("停止播放");
+    
     // 更新状态显示
     inferenceStatusLabel->setText("推理: 运行中");
-    inferenceStatusLabel->setStyleSheet("color: #2ecc71; font-size: 12px; font-weight: 500;");
-
-    statusLabel->setText("🤖 视频推理已启动");
+    
+    statusLabel->setText("视频推理已启动");
 
     // 开始播放视频
     mediaPlayer->play();
@@ -812,14 +652,12 @@ void MainWindow::stopVideoInference()
     frameCondition.wakeAll();
 
     // 更新按钮状态
-    inferenceButton->setText("🚀 推理播放");
-    inferenceButton->setStyleSheet(inferenceButton->styleSheet().replace("#e74c3c", "#9b59b6"));
-
+    inferenceButton->setText("推理播放");
+    
     // 更新状态显示
     inferenceStatusLabel->setText(QString("推理: 已停止 (处理%1帧)").arg(inferenceFrameCount));
-    inferenceStatusLabel->setStyleSheet("color: #e74c3c; font-size: 12px; font-weight: 500;");
-
-    statusLabel->setText(QString("⏹️ 视频推理已停止 - 处理%1帧").arg(inferenceFrameCount));
+    
+    statusLabel->setText(QString("视频推理已停止 - 处理%1帧").arg(inferenceFrameCount));
 
     qDebug() << "Video inference stopped";
 }

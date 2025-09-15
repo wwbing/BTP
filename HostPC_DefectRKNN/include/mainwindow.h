@@ -44,8 +44,6 @@ private slots:
     
 private:
     void setupUI();
-    QPushButton* createStyledButton(const QString &text, const QString &color);
-    QString darkenColor(const QString &color, int percent);
     void initializeRKNN();
     void loadImage(const QString &path);
     bool runRKNNInference(const QImage &inputImage, QImage &outputImage);

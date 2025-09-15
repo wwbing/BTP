@@ -22,10 +22,31 @@
 #include "image_utils.h"
 #include "file_utils.h"
 #include "common.h"
+#include <vector>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), rknn_initialized(false), mediaPlayer(nullptr), videoProbe(nullptr), inferenceThread(nullptr), videoInferenceEnabled(false), isProcessingFrame(false), inferenceFrameCount(0), totalDetectionCount(0)
 {
+    // 初始化spdlog日志
+    try {
+        // 创建同时输出到控制台和文件的logger
+        auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+        auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>("rknn_defect_detector.log", true);
+
+        std::vector<spdlog::sink_ptr> sinks {console_sink, file_sink};
+        auto logger = std::make_shared<spdlog::logger>("rknn_defect_detector", sinks.begin(), sinks.end());
+
+        spdlog::register_logger(logger);
+        spdlog::set_default_logger(logger);
+        spdlog::set_level(spdlog::level::debug); // 设置为debug级别，看到更多信息
+        spdlog::flush_on(spdlog::level::debug);  // 遇到debug及以上级别就刷新
+
+        spdlog::info("RKNN缺陷检测系统启动");
+    } catch (const spdlog::spdlog_ex &ex) {
+        qDebug() << "日志初始化失败:" << ex.what();
+    }
+
+  
     setupUI();
     initializeRKNN();
 
@@ -36,7 +57,10 @@ MainWindow::MainWindow(QWidget *parent)
     // 初始化视频推理相关组件
     initVideoInference();
 
-    
+    // 初始化摄像头窗口
+    cameraWindow = nullptr;
+
+
     }
 
 void MainWindow::initVideoInference()
@@ -47,9 +71,9 @@ void MainWindow::initVideoInference()
     // 连接到媒体播放器
     if (videoProbe->setSource(mediaPlayer)) {
         connect(videoProbe, &QVideoProbe::videoFrameProbed, this, &MainWindow::processVideoFrame);
-        qDebug() << "Video probe connected successfully";
+        spdlog::info("Video probe连接成功");
     } else {
-        qCritical() << "Failed to connect video probe - video inference will not work!";
+        spdlog::error("Video probe连接失败 - 视频推理功能将无法使用!");
     }
 }
 
@@ -73,6 +97,15 @@ MainWindow::~MainWindow()
     if (videoProbe) {
         delete videoProbe;
     }
+
+    // 清理摄像头窗口
+    if (cameraWindow) {
+        delete cameraWindow;
+    }
+
+    // 关闭日志
+    spdlog::info("RKNN缺陷检测系统关闭");
+    spdlog::drop_all(); // 清理所有logger
 }
 
 void MainWindow::setupUI()
@@ -90,7 +123,6 @@ void MainWindow::setupUI()
     // 创建按钮布局
     QHBoxLayout *buttonLayout1 = new QHBoxLayout();
     QHBoxLayout *buttonLayout2 = new QHBoxLayout();
-    QHBoxLayout *buttonLayout3 = new QHBoxLayout();
 
     // 创建按钮
     openButton = new QPushButton("打开图片");
@@ -98,6 +130,7 @@ void MainWindow::setupUI()
     openFolderButton = new QPushButton("选择文件夹");
     batchDetectButton = new QPushButton("批量检测");
     openVideoButton = new QPushButton("打开视频");
+    openCameraButton = new QPushButton("打开摄像头");
     inferenceButton = new QPushButton("推理播放");
 
     // 设置按钮初始状态
@@ -108,14 +141,14 @@ void MainWindow::setupUI()
     // 添加按钮到布局
     buttonLayout1->addWidget(openButton);
     buttonLayout1->addWidget(detectButton);
-    buttonLayout2->addWidget(openFolderButton);
-    buttonLayout2->addWidget(batchDetectButton);
-    buttonLayout3->addWidget(openVideoButton);
-    buttonLayout3->addWidget(inferenceButton);
+    buttonLayout1->addWidget(openFolderButton);
+    buttonLayout1->addWidget(batchDetectButton);
+    buttonLayout2->addWidget(openVideoButton);
+    buttonLayout2->addWidget(openCameraButton);
+    buttonLayout2->addWidget(inferenceButton);
 
     buttonLayout1->setSpacing(10);
     buttonLayout2->setSpacing(10);
-    buttonLayout3->setSpacing(10);
 
     // 创建堆叠布局，用于在图片和视频之间切换
     stackedLayout = new QStackedLayout();
@@ -150,7 +183,6 @@ void MainWindow::setupUI()
     // 添加所有组件到主布局
     mainLayout->addLayout(buttonLayout1);
     mainLayout->addLayout(buttonLayout2);
-    mainLayout->addLayout(buttonLayout3);
     mainLayout->addLayout(stackedLayout, 1);
     mainLayout->addLayout(statusLayout);
 
@@ -160,6 +192,7 @@ void MainWindow::setupUI()
     connect(openFolderButton, &QPushButton::clicked, this, &MainWindow::openFolder);
     connect(batchDetectButton, &QPushButton::clicked, this, &MainWindow::batchDetect);
     connect(openVideoButton, &QPushButton::clicked, this, &MainWindow::openVideo);
+    connect(openCameraButton, &QPushButton::clicked, this, &MainWindow::openCamera);
     connect(inferenceButton, &QPushButton::clicked, this, &MainWindow::toggleVideoInference);
 
     // 设置窗口属性
@@ -189,7 +222,7 @@ void MainWindow::initializeRKNN()
     // 恢复原始工作目录
     QDir::setCurrent(originalDir);
 
-    qDebug() << "Post process initialized, labels should be loaded";
+    spdlog::debug("Post process初始化完成，标签已加载");
     
     // 初始化RKNN模型
     int ret = init_yolov6_model(model_path, (rknn_app_context_t*)rknn_app_ctx);
@@ -279,11 +312,9 @@ bool MainWindow::runRKNNInference(const QImage &inputImage, QImage &outputImage)
     memset(&src_image, 0, sizeof(image_buffer_t));
 
     // 验证输入图像，确保是纯视频帧
-    qInfo() << "===== 推理前调试信息 =====";
-    qInfo() << "送入RKNN的图片分辨率:" << inputImage.size();
-    qInfo() << "图片格式:" << inputImage.format();
-    qInfo() << "每行字节数:" << inputImage.bytesPerLine();
-    qInfo() << "=========================";
+    spdlog::debug("推理前调试信息 - 图片分辨率:{}x{}, 格式:{}, 每行字节数:{}",
+                  inputImage.width(), inputImage.height(),
+                  static_cast<int>(inputImage.format()), inputImage.bytesPerLine());
 
     // 直接使用传入的QImage数据
     QImage rgbImage = inputImage.convertToFormat(QImage::Format_RGB888);
@@ -294,20 +325,20 @@ bool MainWindow::runRKNNInference(const QImage &inputImage, QImage &outputImage)
     src_image.size = rgbImage.width() * rgbImage.height() * 3;
 
     if (src_image.virt_addr == NULL) {
-        qDebug() << "Failed to allocate memory for image buffer";
+        spdlog::error("分配图像缓冲区内存失败");
         return false;
     }
 
     // 复制QImage数据到图像缓冲区
     memcpy(src_image.virt_addr, rgbImage.constBits(), src_image.size);
 
-    qDebug() << "Created image buffer from QImage:" << src_image.width << "x" << src_image.height;
+    spdlog::debug("从QImage创建图像缓冲区: {}x{}", src_image.width, src_image.height);
 
     // 运行RKNN推理
     object_detect_result_list od_results;
     int ret = inference_yolov6_model((rknn_app_context_t*)rknn_app_ctx, &src_image, &od_results);
     if (ret != 0) {
-        qCritical() << "RKNN推理失败，返回码:" << ret;
+        spdlog::error("RKNN推理失败，返回码: {}", ret);
         // 释放图像内存
         if (src_image.virt_addr != NULL) {
             free(src_image.virt_addr);
@@ -315,7 +346,7 @@ bool MainWindow::runRKNNInference(const QImage &inputImage, QImage &outputImage)
         return false;
     }
 
-    qInfo() << "RKNN推理成功，检测到" << od_results.count << "个目标";
+    spdlog::info("RKNN推理成功，检测到{}个目标", od_results.count);
     
     // 复制原图用于绘制结果
     outputImage = inputImage.copy();
@@ -334,9 +365,9 @@ bool MainWindow::runRKNNInference(const QImage &inputImage, QImage &outputImage)
         int x2 = det_result->box.right;
         int y2 = det_result->box.bottom;
 
-        qInfo() << "Drawing box" << i << "- class:" << coco_cls_to_name(det_result->cls_id)
-                << "confidence:" << det_result->prop
-                << "coords:(" << x1 << "," << y1 << ")-(" << x2 << "," << y2 << ")";
+        spdlog::trace("绘制边框{} - 类别:{}, 置信度:{}, 坐标:({},{})-({},{})",
+                 i, coco_cls_to_name(det_result->cls_id), det_result->prop,
+                 x1, y1, x2, y2);
         
         // 绘制边界框 - 使用蓝色，参考rknn_infer
         QRect rect(x1, y1, x2 - x1, y2 - y1);
@@ -484,7 +515,7 @@ void MainWindow::processFolder(const QString &folderPath)
         // 处理单张图片
         QImage inputImage(imagePath);
         if (inputImage.isNull()) {
-            qDebug() << "无法读取图片:" << imagePath;
+            spdlog::warn("无法读取图片: {}", imagePath.toStdString());
             failCount++;
             continue;
         }
@@ -497,14 +528,14 @@ void MainWindow::processFolder(const QString &folderPath)
             QString resultPath = outputDir + "/" + fileInfo.completeBaseName() + "_result.jpg";
             if (saveResultImage(outputImage, resultPath)) {
                 successCount++;
-                qDebug() << "保存结果:" << resultPath;
+                spdlog::debug("保存结果: {}", resultPath.toStdString());
             } else {
                 failCount++;
-                qDebug() << "保存失败:" << resultPath;
+                spdlog::warn("保存失败: {}", resultPath.toStdString());
             }
         } else {
             failCount++;
-            qDebug() << "推理失败:" << imagePath;
+            spdlog::warn("推理失败: {}", imagePath.toStdString());
         }
 
         // 定期更新界面显示最后处理的结果
@@ -557,7 +588,7 @@ void MainWindow::openVideo()
             this, [this](const QString &key, const QVariant &value) {
                 if (key == QMediaMetaData::Resolution) {
                     QSize videoSize = value.toSize();
-                    qInfo() << "视频原始分辨率:" << videoSize;
+                    spdlog::info("视频原始分辨率: {}x{}", videoSize.width(), videoSize.height());
                 }
             });
 
@@ -565,24 +596,24 @@ void MainWindow::openVideo()
         connect(mediaPlayer, static_cast<void(QMediaPlayer::*)(QMediaPlayer::State)>(&QMediaPlayer::stateChanged),
             this, [this](QMediaPlayer::State state) {
             if (state == QMediaPlayer::StoppedState) {
-                qInfo() << "视频已加载，状态: LoadedMedia";
+                spdlog::info("视频已加载，状态: LoadedMedia");
                 if (mediaPlayer->isVideoAvailable()) {
-                    qInfo() << "视频流可用";
+                    spdlog::info("视频流可用");
                     // 获取视频分辨率
                     QVariant resolution = mediaPlayer->metaData(QMediaMetaData::Resolution);
                     if (resolution.isValid()) {
                         QSize videoSize = resolution.toSize();
-                        qInfo() << "视频原始分辨率:" << videoSize;
+                        spdlog::info("视频原始分辨率: {}x{}", videoSize.width(), videoSize.height());
                     }
 
                     // 打印更多元数据信息
-                    qInfo() << "=== 视频元数据调试信息 ===";
+                    spdlog::debug("视频元数据调试信息开始");
                     QStringList metaDataKeys = mediaPlayer->availableMetaData();
                     for (const QString &key : metaDataKeys) {
                         QVariant value = mediaPlayer->metaData(key);
-                        qInfo() << key << ":" << value;
+                        spdlog::debug("  {}: {}", key.toStdString(), value.toString().toStdString());
                     }
-                    qInfo() << "==============================";
+                    spdlog::debug("视频元数据调试信息结束");
 
                     // QVideoWidget已移除，现在直接从mediaPlayer获取原始帧
                 }
@@ -633,7 +664,7 @@ void MainWindow::startVideoInference()
     // 开始播放视频
     mediaPlayer->play();
 
-    qDebug() << "Video inference started";
+    spdlog::info("视频推理启动");
 }
 
 void MainWindow::stopVideoInference()
@@ -659,7 +690,7 @@ void MainWindow::stopVideoInference()
     
     statusLabel->setText(QString("视频推理已停止 - 处理%1帧").arg(inferenceFrameCount));
 
-    qDebug() << "Video inference stopped";
+    spdlog::info("视频推理停止");
 }
 
 void MainWindow::processVideoFrame(const QVideoFrame &frame)
@@ -676,14 +707,12 @@ void MainWindow::processVideoFrame(const QVideoFrame &frame)
     // 转换帧为图像进行推理
     QImage image = videoFrameToImage(frame);
     if (image.isNull()) {
-        qWarning() << "QVideoProbe failed to convert frame to image";
+        spdlog::warn("QVideoProbe无法将帧转换为图像");
         return;
     }
 
-    qInfo() << "===== QVideoProbe捕获信息 =====";
-    qInfo() << "QVideoProbe捕获的帧分辨率:" << image.size();
-    qInfo() << "帧格式:" << image.format();
-    qInfo() << "==============================";
+    spdlog::debug("QVideoProbe捕获信息 - 帧分辨率:{}x{}, 帧格式:{}",
+                  image.width(), image.height(), static_cast<int>(image.format()));
 
     // 设置处理标志
     isProcessingFrame = true;
@@ -724,13 +753,13 @@ void MainWindow::displayInferenceResult(const QImage &resultImage)
 QImage MainWindow::videoFrameToImage(const QVideoFrame &frame)
 {
     if (!frame.isValid()) {
-        qWarning() << "Invalid video frame";
+        spdlog::warn("无效的视频帧");
         return QImage();
     }
 
     QVideoFrame cloneFrame(frame);
     if (!cloneFrame.map(QAbstractVideoBuffer::ReadOnly)) {
-        qWarning() << "Failed to map video frame";
+        spdlog::warn("无法映射视频帧");
         return QImage();
     }
 
@@ -738,7 +767,8 @@ QImage MainWindow::videoFrameToImage(const QVideoFrame &frame)
     QVideoFrame::PixelFormat pixelFormat = cloneFrame.pixelFormat();
     QSize size = cloneFrame.size();
 
-    qInfo() << "Converting video frame - format:" << pixelFormat << "size:" << size;
+    spdlog::debug("转换视频帧 - 格式:{}, 大小:{}x{}",
+                  static_cast<int>(pixelFormat), size.width(), size.height());
 
     QImage image;
 
@@ -746,7 +776,7 @@ QImage MainWindow::videoFrameToImage(const QVideoFrame &frame)
     image = cloneFrame.image();
 
     if (image.isNull()) {
-        qWarning() << "QVideoFrame::image() failed, attempting manual conversion";
+        spdlog::debug("QVideoFrame::image()失败，尝试手动转换");
 
         // 手动转换更多格式
         switch (pixelFormat) {
@@ -768,11 +798,11 @@ QImage MainWindow::videoFrameToImage(const QVideoFrame &frame)
                 image = QImage(size, QImage::Format_RGB888);
                 if (!image.isNull()) {
                     image.fill(Qt::black); // 临时填充，实际应该做YUV到RGB的转换
-                    qWarning() << "YUV format detected but not fully implemented";
+                    spdlog::warn("检测到YUV格式但未完全实现");
                 }
                 break;
             default:
-                qWarning() << "Unsupported pixel format:" << pixelFormat;
+                spdlog::warn("不支持的像素格式: {}", static_cast<int>(pixelFormat));
                 break;
         }
     }
@@ -780,7 +810,7 @@ QImage MainWindow::videoFrameToImage(const QVideoFrame &frame)
     cloneFrame.unmap();
 
     if (image.isNull()) {
-        qCritical() << "Failed to convert video frame to image";
+        spdlog::error("视频帧转换为图像失败");
         return QImage();
     }
 
@@ -789,6 +819,24 @@ QImage MainWindow::videoFrameToImage(const QVideoFrame &frame)
         image = image.convertToFormat(QImage::Format_RGB888);
     }
 
-    qInfo() << "Successfully converted video frame to RGB888:" << image.size();
+    spdlog::debug("成功将视频帧转换为RGB888: {}x{}", image.width(), image.height());
     return image;
+}
+
+void MainWindow::openCamera()
+{
+    spdlog::info("打开摄像头窗口");
+
+    // 如果摄像头窗口已经存在，先关闭它
+    if (cameraWindow) {
+        cameraWindow->close();
+        delete cameraWindow;
+        cameraWindow = nullptr;
+    }
+
+    // 创建新的摄像头窗口
+    cameraWindow = new CameraWindow(this);
+    cameraWindow->show();
+
+    spdlog::info("摄像头窗口已打开");
 }

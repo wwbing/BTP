@@ -22,6 +22,10 @@
 #include <QWaitCondition>
 #include <QVideoFrame>
 #include <QMediaMetaData>
+#include <spdlog/spdlog.h>
+#include <spdlog/sinks/basic_file_sink.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
+#include "camerawindow.h"
 // RKNN相关头文件将在cpp文件中包含
 
 class MainWindow : public QMainWindow
@@ -38,6 +42,7 @@ private slots:
     void openFolder();
     void batchDetect();
     void openVideo();
+    void openCamera();
     void toggleVideoInference();
     void processVideoFrame(const QVideoFrame &frame);
     void displayInferenceResult(const QImage &resultImage);
@@ -62,6 +67,7 @@ private:
     QPushButton *openFolderButton;
     QPushButton *batchDetectButton;
     QPushButton *openVideoButton;
+    QPushButton *openCameraButton;
     QPushButton *inferenceButton;
     QLabel *imageLabel;
     QLabel *statusLabel;
@@ -69,6 +75,9 @@ private:
     QTimer *videoTimer;
     QStackedLayout *stackedLayout;
     QLabel *inferenceResultLabel;
+
+    // 摄像头窗口
+    CameraWindow *cameraWindow;
 
     // 当前图片路径
     QString currentImagePath;

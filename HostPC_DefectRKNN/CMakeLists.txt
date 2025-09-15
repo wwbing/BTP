@@ -23,10 +23,14 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
+# 查找spdlog包
+find_package(spdlog REQUIRED)
+
 # 源文件
 set(SOURCES
     src/main.cpp
     src/mainwindow.cpp
+    src/camerawindow.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../rknn_infer/src/rknpu2/yolov6.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/../rknn_infer/src/postprocess.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/../rknn_infer/utils/file_utils.c
@@ -37,6 +41,7 @@ set(SOURCES
 # 头文件
 set(HEADERS
     include/mainwindow.h
+    include/camerawindow.h
 )
 
 # RKNN库路径
@@ -46,7 +51,7 @@ set(RKNN_LIB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../rknn_model_zoo-2.3.2/install/rk
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 
 # 链接Qt库
-target_link_libraries(${PROJECT_NAME} PRIVATE Qt5::Core Qt5::Widgets Qt5::Multimedia Qt5::MultimediaWidgets)
+target_link_libraries(${PROJECT_NAME} PRIVATE Qt5::Core Qt5::Widgets Qt5::Multimedia Qt5::MultimediaWidgets spdlog::spdlog)
 
 # 不使用OpenCV，仅使用Qt的图像处理功能
 

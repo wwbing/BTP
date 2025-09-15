@@ -288,7 +288,7 @@ int write_image(const char* path, const image_buffer_t* img)
         ret = stbi_write_jpg(path, width, height, channel, data, quality);
 #endif
     } else if (strcmp(_ext, ".data") == 0 || strcmp(_ext, ".DATA") == 0) {
-        int size = get_image_size(img);
+        int size = get_image_size((image_buffer_t*)img);
         ret = write_data_to_file(path, data, size);
     } else {
         // unknown extension type
@@ -455,7 +455,7 @@ static int convert_image_cpu(image_buffer_t *src, image_buffer_t *dst, image_rec
         printf("convert_image_cpu fail %d\n", reti);
         return -1;
     }
-    printf("finish\n");
+    //printf("finish\n");
     return 0;
 }
 
@@ -632,7 +632,7 @@ static int convert_image_rga(image_buffer_t* src_img, image_buffer_t* dst_img, i
     if (drect.width != dstWidth || drect.height != dstHeight) {
         im_rect dst_whole_rect = {0, 0, dstWidth, dstHeight};
         int imcolor;
-        char* p_imcolor = &imcolor;
+        unsigned char* p_imcolor = (unsigned char*)&imcolor;
         p_imcolor[0] = color;
         p_imcolor[1] = color;
         p_imcolor[2] = color;
@@ -681,7 +681,7 @@ int convert_image(image_buffer_t* src_img, image_buffer_t* dst_img, image_rect_t
     // 检查环境变量，如果设置了 RGA_DISABLE 则跳过RGA处理
     char *rga_disable = getenv("RGA_DISABLE");
     if (rga_disable && strcmp(rga_disable, "1") == 0) {
-        printf("RGA disabled by environment variable, use cpu\n");
+        //printf("RGA disabled by environment variable, use cpu\n");
         ret = convert_image_cpu(src_img, dst_img, src_box, dst_box, color);
     } else {
 #if defined(RV1106_1103)

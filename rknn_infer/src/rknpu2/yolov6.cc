@@ -249,8 +249,7 @@ out:
     total_time = get_current_time_ms() - start_time;
 
     // 推理性能统计
-    printf("预处理: %lld ms, NPU推理: %lld ms, 后处理: %lld ms, 总计: %lld ms\n",
-           preprocess_time, inference_time, postprocess_time, total_time);
+    //printf("预处理: %lld ms, NPU推理: %lld ms, 后处理: %lld ms, 总计: %lld ms\n", preprocess_time, inference_time, postprocess_time, total_time);
 
     return ret;
 }

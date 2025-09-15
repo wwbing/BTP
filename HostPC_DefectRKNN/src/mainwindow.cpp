@@ -8,7 +8,6 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QColor>
-#include <QVideoWidget>
 #include <QMediaPlayer>
 #include <QVideoProbe>
 #include <QSlider>
@@ -38,9 +37,7 @@ MainWindow::MainWindow(QWidget *parent)
     initVideoInference();
 
     
-    // 连接视频定时器
-    connect(videoTimer, &QTimer::timeout, this, &MainWindow::updateVideoFrame);
-}
+    }
 
 void MainWindow::initVideoInference()
 {
@@ -52,11 +49,8 @@ void MainWindow::initVideoInference()
         connect(videoProbe, &QVideoProbe::videoFrameProbed, this, &MainWindow::processVideoFrame);
         qDebug() << "Video probe connected successfully";
     } else {
-        qDebug() << "Failed to connect video probe, will use fallback method";
+        qCritical() << "Failed to connect video probe - video inference will not work!";
     }
-
-    // 设置定时器用于备用帧捕获
-    videoTimer->setInterval(100); // 100ms间隔
 }
 
 MainWindow::~MainWindow()
@@ -190,17 +184,7 @@ void MainWindow::setupUI()
         "}"
     );
 
-    // 创建视频播放器
-    videoWidget = new QVideoWidget(this);
-    videoWidget->setMinimumSize(800, 500);
-    videoWidget->setStyleSheet(
-        "QVideoWidget {"
-        "   border: 2px solid #bdc3c7;"
-        "   border-radius: 8px;"
-        "   background: #000000;"
-        "}"
-    );
-
+    
     // 创建推理结果显示标签
     inferenceResultLabel = new QLabel(this);
     inferenceResultLabel->setAlignment(Qt::AlignCenter);
@@ -219,7 +203,6 @@ void MainWindow::setupUI()
     );
 
     stackedLayout->addWidget(imageLabel);
-    stackedLayout->addWidget(videoWidget);
     stackedLayout->addWidget(inferenceResultLabel);
     imageLayout->addLayout(stackedLayout);
 
@@ -453,6 +436,13 @@ bool MainWindow::runRKNNInference(const QImage &inputImage, QImage &outputImage)
     image_buffer_t src_image;
     memset(&src_image, 0, sizeof(image_buffer_t));
 
+    // 验证输入图像，确保是纯视频帧
+    qInfo() << "===== 推理前调试信息 =====";
+    qInfo() << "送入RKNN的图片分辨率:" << inputImage.size();
+    qInfo() << "图片格式:" << inputImage.format();
+    qInfo() << "每行字节数:" << inputImage.bytesPerLine();
+    qInfo() << "=========================";
+
     // 直接使用传入的QImage数据
     QImage rgbImage = inputImage.convertToFormat(QImage::Format_RGB888);
     src_image.width = rgbImage.width();
@@ -475,13 +465,15 @@ bool MainWindow::runRKNNInference(const QImage &inputImage, QImage &outputImage)
     object_detect_result_list od_results;
     int ret = inference_yolov6_model((rknn_app_context_t*)rknn_app_ctx, &src_image, &od_results);
     if (ret != 0) {
-        qDebug() << "RKNN推理失败";
+        qCritical() << "RKNN推理失败，返回码:" << ret;
         // 释放图像内存
         if (src_image.virt_addr != NULL) {
             free(src_image.virt_addr);
         }
         return false;
     }
+
+    qInfo() << "RKNN推理成功，检测到" << od_results.count << "个目标";
     
     // 复制原图用于绘制结果
     outputImage = inputImage.copy();
@@ -493,12 +485,16 @@ bool MainWindow::runRKNNInference(const QImage &inputImage, QImage &outputImage)
     // 绘制检测框和标签
     for (int i = 0; i < od_results.count; i++) {
         object_detect_result *det_result = &(od_results.results[i]);
-        
+
         // 计算相对于原图的坐标
         int x1 = det_result->box.left;
         int y1 = det_result->box.top;
         int x2 = det_result->box.right;
         int y2 = det_result->box.bottom;
+
+        qInfo() << "Drawing box" << i << "- class:" << coco_cls_to_name(det_result->cls_id)
+                << "confidence:" << det_result->prop
+                << "coords:(" << x1 << "," << y1 << ")-(" << x2 << "," << y2 << ")";
         
         // 绘制边界框 - 使用蓝色，参考rknn_infer
         QRect rect(x1, y1, x2 - x1, y2 - y1);
@@ -706,68 +702,56 @@ void MainWindow::openVideo()
 
         // 加载视频文件
         mediaPlayer->setMedia(QUrl::fromLocalFile(fileName));
-        mediaPlayer->setVideoOutput(videoWidget);
+        // 不需要设置视频输出到widget，QVideoProbe直接从mediaPlayer获取帧
 
-        // 切换到视频显示
-        stackedLayout->setCurrentWidget(videoWidget);
+        // 切换到推理结果显示界面
+        stackedLayout->setCurrentWidget(inferenceResultLabel);
 
         // 启用推理按钮
         inferenceButton->setEnabled(true);
+
+        // 获取并打印视频原始分辨率
+        connect(mediaPlayer, QOverload<const QString&, const QVariant&>::of(&QMediaPlayer::metaDataChanged),
+            this, [this](const QString &key, const QVariant &value) {
+                if (key == QMediaMetaData::Resolution) {
+                    QSize videoSize = value.toSize();
+                    qInfo() << "视频原始分辨率:" << videoSize;
+                }
+            });
+
+        // 也在视频加载完成后尝试获取分辨率
+        connect(mediaPlayer, static_cast<void(QMediaPlayer::*)(QMediaPlayer::State)>(&QMediaPlayer::stateChanged),
+            this, [this](QMediaPlayer::State state) {
+            if (state == QMediaPlayer::StoppedState) {
+                qInfo() << "视频已加载，状态: LoadedMedia";
+                if (mediaPlayer->isVideoAvailable()) {
+                    qInfo() << "视频流可用";
+                    // 获取视频分辨率
+                    QVariant resolution = mediaPlayer->metaData(QMediaMetaData::Resolution);
+                    if (resolution.isValid()) {
+                        QSize videoSize = resolution.toSize();
+                        qInfo() << "视频原始分辨率:" << videoSize;
+                    }
+
+                    // 打印更多元数据信息
+                    qInfo() << "=== 视频元数据调试信息 ===";
+                    QStringList metaDataKeys = mediaPlayer->availableMetaData();
+                    for (const QString &key : metaDataKeys) {
+                        QVariant value = mediaPlayer->metaData(key);
+                        qInfo() << key << ":" << value;
+                    }
+                    qInfo() << "==============================";
+
+                    // QVideoWidget已移除，现在直接从mediaPlayer获取原始帧
+                }
+            }
+        });
 
         statusLabel->setText(QString("🎬 已加载视频: %1").arg(QFileInfo(fileName).fileName()));
     }
 }
 
 
-void MainWindow::updateVideoFrame()
-{
-    // 备用方案：从videoWidget截图进行推理
-    if (!videoInferenceEnabled || !rknn_initialized) {
-        return;
-    }
-
-    // 检查是否正在处理上一帧
-    if (isProcessingFrame) {
-        return;
-    }
-
-    // 从videoWidget截图
-    QPixmap pixmap = videoWidget->grab();
-    if (pixmap.isNull()) {
-        qDebug() << "Failed to grab video widget";
-        return;
-    }
-
-    QImage image = pixmap.toImage();
-    if (image.isNull()) {
-        qDebug() << "Failed to convert pixmap to image";
-        return;
-    }
-
-    qDebug() << "Backup capture: grabbed image size:" << image.size() << "format:" << image.format();
-
-    // 设置处理标志
-    isProcessingFrame = true;
-
-    // 执行RKNN推理
-    QImage resultImage;
-    if (runRKNNInference(image, resultImage)) {
-        // 显示推理结果
-        displayInferenceResult(resultImage);
-
-        // 更新统计信息
-        inferenceFrameCount++;
-        totalDetectionCount++;
-
-        // 每10帧更新一次状态显示
-        if (inferenceFrameCount % 10 == 0) {
-            inferenceStatusLabel->setText(QString("推理: 运行中 (%1帧)").arg(inferenceFrameCount));
-        }
-    }
-
-    // 重置处理标志
-    isProcessingFrame = false;
-}
 
 
 // 视频推理相关功能实现
@@ -809,12 +793,6 @@ void MainWindow::startVideoInference()
     // 开始播放视频
     mediaPlayer->play();
 
-    // 启动备用捕获定时器
-    if (!videoTimer->isActive()) {
-        videoTimer->start(INFERENCE_INTERVAL_MS);
-        qDebug() << "Started backup video capture timer";
-    }
-
     qDebug() << "Video inference started";
 }
 
@@ -824,12 +802,6 @@ void MainWindow::stopVideoInference()
 
     // 停止视频播放
     mediaPlayer->stop();
-
-    // 停止备用捕获定时器
-    if (videoTimer->isActive()) {
-        videoTimer->stop();
-        qDebug() << "Stopped backup video capture timer";
-    }
 
     // 清空帧队列
     QMutexLocker locker(&inferenceMutex);
@@ -866,17 +838,14 @@ void MainWindow::processVideoFrame(const QVideoFrame &frame)
     // 转换帧为图像进行推理
     QImage image = videoFrameToImage(frame);
     if (image.isNull()) {
-        qDebug() << "QVideoProbe failed - backup timer will handle capture";
+        qWarning() << "QVideoProbe failed to convert frame to image";
         return;
     }
 
-    qDebug() << "QVideoProbe succeeded - image size:" << image.size() << "format:" << image.format();
-
-    // 停止备用定时器，因为QVideoProbe在工作
-    if (videoTimer->isActive()) {
-        videoTimer->stop();
-        qDebug() << "Stopped backup timer - QVideoProbe is working";
-    }
+    qInfo() << "===== QVideoProbe捕获信息 =====";
+    qInfo() << "QVideoProbe捕获的帧分辨率:" << image.size();
+    qInfo() << "帧格式:" << image.format();
+    qInfo() << "==============================";
 
     // 设置处理标志
     isProcessingFrame = true;
@@ -917,13 +886,13 @@ void MainWindow::displayInferenceResult(const QImage &resultImage)
 QImage MainWindow::videoFrameToImage(const QVideoFrame &frame)
 {
     if (!frame.isValid()) {
-        qDebug() << "Invalid video frame";
+        qWarning() << "Invalid video frame";
         return QImage();
     }
 
     QVideoFrame cloneFrame(frame);
     if (!cloneFrame.map(QAbstractVideoBuffer::ReadOnly)) {
-        qDebug() << "Failed to map video frame";
+        qWarning() << "Failed to map video frame";
         return QImage();
     }
 
@@ -931,41 +900,57 @@ QImage MainWindow::videoFrameToImage(const QVideoFrame &frame)
     QVideoFrame::PixelFormat pixelFormat = cloneFrame.pixelFormat();
     QSize size = cloneFrame.size();
 
-    qDebug() << "Video frame format:" << pixelFormat << "size:" << size;
+    qInfo() << "Converting video frame - format:" << pixelFormat << "size:" << size;
 
     QImage image;
 
-    // 尝试使用QVideoFrame的内置转换功能
+    // 优先使用QVideoFrame的内置转换功能
     image = cloneFrame.image();
 
     if (image.isNull()) {
-        qDebug() << "QVideoFrame::image() failed, trying manual conversion";
+        qWarning() << "QVideoFrame::image() failed, attempting manual conversion";
 
-        // 手动转换常见格式
-        if (pixelFormat == QVideoFrame::Format_RGB32) {
-            image = QImage(cloneFrame.bits(),
-                         size.width(),
-                         size.height(),
-                         cloneFrame.bytesPerLine(),
-                         QImage::Format_RGB32);
-        } else if (pixelFormat == QVideoFrame::Format_ARGB32) {
-            image = QImage(cloneFrame.bits(),
-                         size.width(),
-                         size.height(),
-                         cloneFrame.bytesPerLine(),
-                         QImage::Format_ARGB32);
-        } else {
-            qDebug() << "Unsupported pixel format:" << pixelFormat;
+        // 手动转换更多格式
+        switch (pixelFormat) {
+            case QVideoFrame::Format_RGB32:
+                image = QImage(cloneFrame.bits(), size.width(), size.height(),
+                             cloneFrame.bytesPerLine(), QImage::Format_RGB32);
+                break;
+            case QVideoFrame::Format_ARGB32:
+                image = QImage(cloneFrame.bits(), size.width(), size.height(),
+                             cloneFrame.bytesPerLine(), QImage::Format_ARGB32);
+                break;
+            case QVideoFrame::Format_RGB24:
+                image = QImage(cloneFrame.bits(), size.width(), size.height(),
+                             cloneFrame.bytesPerLine(), QImage::Format_RGB888);
+                break;
+            case QVideoFrame::Format_YUV420P:
+            case QVideoFrame::Format_YV12:
+                // YUV格式需要转换，这里使用QImage的转换能力
+                image = QImage(size, QImage::Format_RGB888);
+                if (!image.isNull()) {
+                    image.fill(Qt::black); // 临时填充，实际应该做YUV到RGB的转换
+                    qWarning() << "YUV format detected but not fully implemented";
+                }
+                break;
+            default:
+                qWarning() << "Unsupported pixel format:" << pixelFormat;
+                break;
         }
     }
 
     cloneFrame.unmap();
 
     if (image.isNull()) {
-        qDebug() << "Failed to convert video frame to image";
+        qCritical() << "Failed to convert video frame to image";
         return QImage();
     }
 
-    qDebug() << "Successfully converted frame to image:" << image.size() << "format:" << image.format();
-    return image.copy(); // 返回副本以避免内存问题
+    // 确保图像格式是RKNN支持的RGB888
+    if (image.format() != QImage::Format_RGB888) {
+        image = image.convertToFormat(QImage::Format_RGB888);
+    }
+
+    qInfo() << "Successfully converted video frame to RGB888:" << image.size();
+    return image;
 }

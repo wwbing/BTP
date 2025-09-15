@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-此文件为 Claude Code (claude.ai/code) 在此代码库中工作时提供指导。
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## 项目概述
 
@@ -38,9 +38,8 @@ BTP/
 ├── 3rdparty/               # 第三方依赖
 │   ├── rknpu2/             # RK3588 NPU 运行时库
 │   ├── librga/             # RGA 图像处理库
-│   └── opencv/             # OpenCV 库
-├── DataSet/               # 测试数据集
-│   └── neu-val/           # 验证图片集
+│   ├── jpeg_turbo/         # JPEG 处理库
+│   └── stb_image/          # 图像加载库
 ├── build-linux.sh          # 构建脚本
 ├── run_neu_det.sh         # 一键运行脚本
 ├── .clang-format          # 代码格式化配置
@@ -220,6 +219,29 @@ YOLOv6 模型有 9 个输出张量：
 - 标签文件应该是纯文本，每行一个类别名称
 - 所有场景都使用中文交互
 
+## 构建系统细节
+
+### 编译数据库
+项目自动生成 `compile_commands.json` 用于代码智能分析，位置：
+- `BTP/build/build_rknn_yolov6_demo_rk3588_linux_aarch64_Release/compile_commands.json`
+- `BTP/HostPC_DefectRKNN/build/compile_commands.json`
+
+### 构建输出结构
+```
+BTP/install/
+├── rk3588_linux_aarch64/rknn_yolov6_demo/
+│   ├── rknn_yolov6_demo          # 可执行文件
+│   ├── lib/                      # 依赖库
+│   └── model/                    # 模型和标签文件
+└── rk3588_linux_aarch64/         # 开发库文件
+```
+
+### 依赖库路径
+运行时需要设置库路径：
+```bash
+export LD_LIBRARY_PATH=./lib:$LD_LIBRARY_PATH
+```
+
 ## 开发注意事项
 
 1. **模型量化**: 模型必须使用 RKNN-Toolkit2 转换为量化格式
@@ -228,6 +250,50 @@ YOLOv6 模型有 9 个输出张量：
 4. **性能优化**: 使用 RGA 进行硬件加速图像处理，多NPU核心并行处理
 5. **错误处理**: 所有 API 调用都有错误检查，注意查看返回值
 6. **批量处理**: 单个文件失败不影响整体处理流程，支持多种图像格式
+
+## 调试和故障排除
+
+### 常见问题
+
+#### 视频帧分辨率问题
+- **症状**: QVideoProbe 获取的帧分辨率与原始视频分辨率不符
+- **原因**: Qt 的 QVideoWidget 在渲染时会对视频进行缩放
+- **调试方法**:
+  ```cpp
+  // 获取原始视频分辨率
+  QVariant resolution = mediaPlayer->metaData(QMediaMetaData::Resolution);
+  // 检查 QVideoWidget 实际大小
+  QSize widgetSize = videoWidget->size();
+  ```
+
+#### RKNN 模型推理失败
+- **检查点**: 确认模型文件路径正确，标签文件格式正确
+- **常见错误**: 类别数量不匹配，模型量化问题
+- **调试方法**: 检查控制台输出，确认 RKNN 运行时库路径设置
+
+#### 构建错误
+- **依赖问题**: 确认交叉编译工具链和 RKNN 运行时库已安装
+- **Qt 相关**: 确认 Qt5 开发库和多媒体模块已安装
+- **解决方法**: 检查 `build-linux.sh` 脚本中的路径配置
+
+### 开发工作流
+
+#### 修改后的快速验证
+```bash
+# 修改代码后快速构建
+cd BTP/HostPC_DefectRKNN/build
+make
+
+# 或者重新构建整个项目
+cd BTP
+./build-linux.sh
+```
+
+#### 代码调试技巧
+- 使用 qDebug() 输出调试信息
+- 检查 RKNN API 返回值
+- 验证图像格式转换过程
+- 确认内存分配和释放配对
 
 ### 缺陷检测模型配置
 当前项目配置用于缺陷检测，包含6个类别：
@@ -261,3 +327,9 @@ YOLOv6 模型有 9 个输出张量：
 - **命令行工具**: 适合自动化部署和集成到生产环境
 - **GUI应用**: 提供友好的用户界面，适合人工操作和测试
 - **统一后端**: 两个组件共享相同的RKNN推理核心，确保结果一致性
+
+### 当前开发状态
+- **视频处理**: 正在调试 QVideoProbe 获取原始视频帧的问题
+- **帧分辨率**: QVideoProbe 获取的是渲染后帧(1130x500)而非原始视频帧(1920x1080)
+- **调试信息**: 已添加视频分辨率和帧处理调试输出
+- **简化工作流**: 实现打开视频→开始推理的简化流程

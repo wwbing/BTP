@@ -11,7 +11,6 @@
 #include <QProgressDialog>
 #include <QDir>
 #include <QFileInfo>
-#include <QVideoWidget>
 #include <QMediaPlayer>
 #include <QVideoProbe>
 #include <QSlider>
@@ -22,6 +21,7 @@
 #include <QMutex>
 #include <QWaitCondition>
 #include <QVideoFrame>
+#include <QMediaMetaData>
 // RKNN相关头文件将在cpp文件中包含
 
 class MainWindow : public QMainWindow
@@ -41,8 +41,7 @@ private slots:
     void toggleVideoInference();
     void processVideoFrame(const QVideoFrame &frame);
     void displayInferenceResult(const QImage &resultImage);
-    void updateVideoFrame();
-
+    
 private:
     void setupUI();
     QPushButton* createStyledButton(const QString &text, const QString &color);
@@ -69,7 +68,6 @@ private:
     QLabel *imageLabel;
     QLabel *statusLabel;
     QLabel *inferenceStatusLabel;
-    QVideoWidget *videoWidget;
     QTimer *videoTimer;
     QStackedLayout *stackedLayout;
     QLabel *inferenceResultLabel;
@@ -101,8 +99,6 @@ private:
     QQueue<QVideoFrame> frameQueue;
     QWaitCondition frameCondition;
 
-    // 常量定义
-    static const int INFERENCE_INTERVAL_MS = 33; // 约30fps
-};
+    };
 
 #endif // MAINWINDOW_H

@@ -37,28 +37,7 @@ MainWindow::MainWindow(QWidget *parent)
     // 初始化视频推理相关组件
     initVideoInference();
 
-    // 连接媒体播放器信号
-    connect(mediaPlayer, &QMediaPlayer::positionChanged, this, &MainWindow::updatePosition);
-    connect(mediaPlayer, &QMediaPlayer::durationChanged, this, &MainWindow::updateDuration);
-    connect(mediaPlayer, &QMediaPlayer::stateChanged, this, [this](QMediaPlayer::State state) {
-        if (state == QMediaPlayer::StoppedState) {
-            playButton->setEnabled(true);
-            pauseButton->setEnabled(false);
-            stopButton->setEnabled(false);
-            statusLabel->setText("视频已停止");
-        } else if (state == QMediaPlayer::PlayingState) {
-            playButton->setEnabled(false);
-            pauseButton->setEnabled(true);
-            stopButton->setEnabled(true);
-            statusLabel->setText("正在播放视频");
-        } else if (state == QMediaPlayer::PausedState) {
-            playButton->setEnabled(true);
-            pauseButton->setEnabled(false);
-            stopButton->setEnabled(true);
-            statusLabel->setText("视频已暂停");
-        }
-    });
-
+    
     // 连接视频定时器
     connect(videoTimer, &QTimer::timeout, this, &MainWindow::updateVideoFrame);
 }
@@ -156,16 +135,10 @@ void MainWindow::setupUI()
 
     // 视频相关按钮
     openVideoButton = createStyledButton("🎬 打开视频", "#27ae60");
-    playButton = createStyledButton("▶️ 播放", "#2ecc71");
-    pauseButton = createStyledButton("⏸️ 暂停", "#f39c12");
-    stopButton = createStyledButton("⏹️ 停止", "#e74c3c");
-    inferenceButton = createStyledButton("🤖 开始推理", "#9b59b6");
+    inferenceButton = createStyledButton("🚀 推理播放", "#9b59b6");
 
     detectButton->setEnabled(false);
     batchDetectButton->setEnabled(false);
-    playButton->setEnabled(false);
-    pauseButton->setEnabled(false);
-    stopButton->setEnabled(false);
     inferenceButton->setEnabled(false);
 
     buttonLayout1->addWidget(openButton);
@@ -173,9 +146,6 @@ void MainWindow::setupUI()
     buttonLayout2->addWidget(openFolderButton);
     buttonLayout2->addWidget(batchDetectButton);
     buttonLayout3->addWidget(openVideoButton);
-    buttonLayout3->addWidget(playButton);
-    buttonLayout3->addWidget(pauseButton);
-    buttonLayout3->addWidget(stopButton);
     buttonLayout3->addWidget(inferenceButton);
 
     buttonLayout1->setSpacing(20);
@@ -253,39 +223,7 @@ void MainWindow::setupUI()
     stackedLayout->addWidget(inferenceResultLabel);
     imageLayout->addLayout(stackedLayout);
 
-    // 创建视频进度控制区域
-    QWidget *progressContainer = new QWidget();
-    QHBoxLayout *progressLayout = new QHBoxLayout(progressContainer);
-    progressLayout->setContentsMargins(0, 10, 0, 0);
-
-    positionSlider = new QSlider(Qt::Horizontal, this);
-    positionSlider->setRange(0, 0);
-    positionSlider->setMinimumWidth(400);
-    positionSlider->setStyleSheet(
-        "QSlider::groove:horizontal {"
-        "   border: 1px solid #bbb;"
-        "   background: white;"
-        "   height: 8px;"
-        "   border-radius: 4px;"
-        "}"
-        "QSlider::handle:horizontal {"
-        "   background: #3498db;"
-        "   border: 1px solid #5c6bc0;"
-        "   width: 18px;"
-        "   margin: -5px 0;"
-        "   border-radius: 9px;"
-        "}"
-    );
-
-    timeLabel = new QLabel("00:00 / 00:00", this);
-    timeLabel->setStyleSheet("color: #7f8c8d; font-size: 12px;");
-
-    progressLayout->addWidget(positionSlider);
-    progressLayout->addWidget(timeLabel);
-    progressLayout->setStretch(0, 1);
-
-    imageLayout->addWidget(progressContainer);
-
+    
     // 创建状态栏
     QWidget *statusBar = new QWidget();
     statusBar->setObjectName("statusBar");
@@ -342,10 +280,6 @@ void MainWindow::setupUI()
 
     // 视频相关信号槽连接
     connect(openVideoButton, &QPushButton::clicked, this, &MainWindow::openVideo);
-    connect(playButton, &QPushButton::clicked, this, &MainWindow::playVideo);
-    connect(pauseButton, &QPushButton::clicked, this, &MainWindow::pauseVideo);
-    connect(stopButton, &QPushButton::clicked, this, &MainWindow::stopVideo);
-    connect(positionSlider, &QSlider::sliderMoved, this, &MainWindow::setPosition);
     connect(inferenceButton, &QPushButton::clicked, this, &MainWindow::toggleVideoInference);
 
     // 设置窗口属性
@@ -777,60 +711,13 @@ void MainWindow::openVideo()
         // 切换到视频显示
         stackedLayout->setCurrentWidget(videoWidget);
 
-        // 启用播放控制按钮
-        playButton->setEnabled(true);
-        pauseButton->setEnabled(false);
-        stopButton->setEnabled(false);
+        // 启用推理按钮
         inferenceButton->setEnabled(true);
 
         statusLabel->setText(QString("🎬 已加载视频: %1").arg(QFileInfo(fileName).fileName()));
     }
 }
 
-void MainWindow::playVideo()
-{
-    if (currentVideoPath.isEmpty()) {
-        QMessageBox::warning(this, "错误", "请先选择视频文件");
-        return;
-    }
-
-    if (mediaPlayer->state() == QMediaPlayer::PausedState) {
-        mediaPlayer->play();
-    } else {
-        mediaPlayer->play();
-    }
-}
-
-void MainWindow::pauseVideo()
-{
-    if (mediaPlayer->state() == QMediaPlayer::PlayingState) {
-        mediaPlayer->pause();
-    }
-}
-
-void MainWindow::stopVideo()
-{
-    mediaPlayer->stop();
-    positionSlider->setValue(0);
-    updateTimeLabel(0, mediaPlayer->duration());
-}
-
-void MainWindow::updatePosition(qint64 position)
-{
-    positionSlider->setValue(position);
-    updateTimeLabel(position, mediaPlayer->duration());
-}
-
-void MainWindow::updateDuration(qint64 duration)
-{
-    positionSlider->setRange(0, duration);
-    updateTimeLabel(mediaPlayer->position(), duration);
-}
-
-void MainWindow::setPosition(int position)
-{
-    mediaPlayer->setPosition(position);
-}
 
 void MainWindow::updateVideoFrame()
 {
@@ -882,36 +769,6 @@ void MainWindow::updateVideoFrame()
     isProcessingFrame = false;
 }
 
-void MainWindow::updateTimeLabel(qint64 current, qint64 total)
-{
-    QString currentTime = formatTime(current);
-    QString totalTime = formatTime(total);
-    timeLabel->setText(QString("%1 / %2").arg(currentTime).arg(totalTime));
-}
-
-QString MainWindow::formatTime(qint64 milliseconds)
-{
-    if (milliseconds < 0) {
-        return "00:00";
-    }
-
-    qint64 seconds = milliseconds / 1000;
-    qint64 minutes = seconds / 60;
-    seconds = seconds % 60;
-    qint64 hours = minutes / 60;
-    minutes = minutes % 60;
-
-    if (hours > 0) {
-        return QString("%1:%2:%3")
-            .arg(hours, 2, 10, QLatin1Char('0'))
-            .arg(minutes, 2, 10, QLatin1Char('0'))
-            .arg(seconds, 2, 10, QLatin1Char('0'));
-    } else {
-        return QString("%1:%2")
-            .arg(minutes, 2, 10, QLatin1Char('0'))
-            .arg(seconds, 2, 10, QLatin1Char('0'));
-    }
-}
 
 // 视频推理相关功能实现
 void MainWindow::toggleVideoInference()
@@ -940,7 +797,7 @@ void MainWindow::startVideoInference()
     totalDetectionCount = 0;
 
     // 更新按钮状态
-    inferenceButton->setText("🛑 停止推理");
+    inferenceButton->setText("⏹️ 停止播放");
     inferenceButton->setStyleSheet(inferenceButton->styleSheet().replace("#9b59b6", "#e74c3c"));
 
     // 更新状态显示
@@ -948,6 +805,9 @@ void MainWindow::startVideoInference()
     inferenceStatusLabel->setStyleSheet("color: #2ecc71; font-size: 12px; font-weight: 500;");
 
     statusLabel->setText("🤖 视频推理已启动");
+
+    // 开始播放视频
+    mediaPlayer->play();
 
     // 启动备用捕获定时器
     if (!videoTimer->isActive()) {
@@ -961,6 +821,9 @@ void MainWindow::startVideoInference()
 void MainWindow::stopVideoInference()
 {
     videoInferenceEnabled = false;
+
+    // 停止视频播放
+    mediaPlayer->stop();
 
     // 停止备用捕获定时器
     if (videoTimer->isActive()) {
@@ -977,7 +840,7 @@ void MainWindow::stopVideoInference()
     frameCondition.wakeAll();
 
     // 更新按钮状态
-    inferenceButton->setText("🤖 开始推理");
+    inferenceButton->setText("🚀 推理播放");
     inferenceButton->setStyleSheet(inferenceButton->styleSheet().replace("#e74c3c", "#9b59b6"));
 
     // 更新状态显示

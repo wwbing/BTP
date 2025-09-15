@@ -16,6 +16,11 @@ static char *labels[OBJ_CLASS_NUM];
 
 inline static int clamp(float val, int min, int max)
 {
+    return val > min ? (val < max ? (int)val : max) : min;
+}
+
+inline static float clampf(float val, float min, float max)
+{
     return val > min ? (val < max ? val : max) : min;
 }
 
@@ -704,17 +709,28 @@ int post_process(rknn_app_context_t *app_ctx, void *outputs, letterbox_t *letter
         }
         int n = indexArray[i];
 
+        // 先从模型输出坐标转换到预处理图像坐标（减去padding）
         float x1 = filterBoxes[n * 4 + 0] - letter_box->x_pad;
         float y1 = filterBoxes[n * 4 + 1] - letter_box->y_pad;
         float x2 = x1 + filterBoxes[n * 4 + 2];
         float y2 = y1 + filterBoxes[n * 4 + 3];
+
+        // 限制在预处理图像的有效区域内
+        float letterbox_img_w = model_in_w - letter_box->x_pad * 2;
+        float letterbox_img_h = model_in_h - letter_box->y_pad * 2;
+        x1 = clampf(x1, 0, letterbox_img_w);
+        y1 = clampf(y1, 0, letterbox_img_h);
+        x2 = clampf(x2, 0, letterbox_img_w);
+        y2 = clampf(y2, 0, letterbox_img_h);
+
         int id = classId[n];
         float obj_conf = objProbs[i];
 
-        od_results->results[last_count].box.left = (int)(clamp(x1, 0, model_in_w) / letter_box->scale);
-        od_results->results[last_count].box.top = (int)(clamp(y1, 0, model_in_h) / letter_box->scale);
-        od_results->results[last_count].box.right = (int)(clamp(x2, 0, model_in_w) / letter_box->scale);
-        od_results->results[last_count].box.bottom = (int)(clamp(y2, 0, model_in_h) / letter_box->scale);
+        // 再从预处理图像坐标转换回原始图像坐标（除以scale）
+        od_results->results[last_count].box.left = (int)(x1 / letter_box->scale);
+        od_results->results[last_count].box.top = (int)(y1 / letter_box->scale);
+        od_results->results[last_count].box.right = (int)(x2 / letter_box->scale);
+        od_results->results[last_count].box.bottom = (int)(y2 / letter_box->scale);
         od_results->results[last_count].prop = obj_conf;
         od_results->results[last_count].cls_id = id;
         last_count++;

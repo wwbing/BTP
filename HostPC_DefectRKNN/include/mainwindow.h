@@ -38,16 +38,10 @@ private slots:
     void openFolder();
     void batchDetect();
     void openVideo();
-    void playVideo();
-    void pauseVideo();
-    void stopVideo();
-    void updatePosition(qint64 position);
-    void updateDuration(qint64 duration);
-    void setPosition(int position);
-    void updateVideoFrame();
     void toggleVideoInference();
     void processVideoFrame(const QVideoFrame &frame);
     void displayInferenceResult(const QImage &resultImage);
+    void updateVideoFrame();
 
 private:
     void setupUI();
@@ -60,9 +54,7 @@ private:
     void processFolder(const QString &folderPath);
     QStringList findImageFiles(const QString &folderPath);
     bool saveResultImage(const QImage &image, const QString &originalPath);
-    QString formatTime(qint64 milliseconds);
-    void updateTimeLabel(qint64 current, qint64 total);
-    QImage videoFrameToImage(const QVideoFrame &frame);
+        QImage videoFrameToImage(const QVideoFrame &frame);
     void initVideoInference();
     void startVideoInference();
     void stopVideoInference();
@@ -73,16 +65,11 @@ private:
     QPushButton *openFolderButton;
     QPushButton *batchDetectButton;
     QPushButton *openVideoButton;
-    QPushButton *playButton;
-    QPushButton *pauseButton;
-    QPushButton *stopButton;
     QPushButton *inferenceButton;
     QLabel *imageLabel;
     QLabel *statusLabel;
     QLabel *inferenceStatusLabel;
     QVideoWidget *videoWidget;
-    QSlider *positionSlider;
-    QLabel *timeLabel;
     QTimer *videoTimer;
     QStackedLayout *stackedLayout;
     QLabel *inferenceResultLabel;
@@ -108,11 +95,14 @@ private:
     bool isProcessingFrame;
     int inferenceFrameCount;
     int totalDetectionCount;
+
+    // 线程同步相关
     QMutex inferenceMutex;
-    QWaitCondition frameCondition;
     QQueue<QVideoFrame> frameQueue;
-    const int MAX_QUEUE_SIZE = 3;
-    const int INFERENCE_INTERVAL_MS = 100; // 推理间隔100ms
+    QWaitCondition frameCondition;
+
+    // 常量定义
+    static const int INFERENCE_INTERVAL_MS = 33; // 约30fps
 };
 
 #endif // MAINWINDOW_H

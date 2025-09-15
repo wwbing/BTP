@@ -1,4 +1,5 @@
 #include "mainwindow.h"
+#include "defect_colors.h"
 #include <QApplication>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -311,11 +312,6 @@ bool MainWindow::runRKNNInference(const QImage &inputImage, QImage &outputImage)
     image_buffer_t src_image;
     memset(&src_image, 0, sizeof(image_buffer_t));
 
-    // 验证输入图像，确保是纯视频帧
-    spdlog::debug("推理前调试信息 - 图片分辨率:{}x{}, 格式:{}, 每行字节数:{}",
-                  inputImage.width(), inputImage.height(),
-                  static_cast<int>(inputImage.format()), inputImage.bytesPerLine());
-
     // 直接使用传入的QImage数据
     QImage rgbImage = inputImage.convertToFormat(QImage::Format_RGB888);
     src_image.width = rgbImage.width();
@@ -331,8 +327,6 @@ bool MainWindow::runRKNNInference(const QImage &inputImage, QImage &outputImage)
 
     // 复制QImage数据到图像缓冲区
     memcpy(src_image.virt_addr, rgbImage.constBits(), src_image.size);
-
-    spdlog::debug("从QImage创建图像缓冲区: {}x{}", src_image.width, src_image.height);
 
     // 运行RKNN推理
     object_detect_result_list od_results;
@@ -368,27 +362,12 @@ bool MainWindow::runRKNNInference(const QImage &inputImage, QImage &outputImage)
         spdlog::trace("绘制边框{} - 类别:{}, 置信度:{}, 坐标:({},{})-({},{})",
                  i, coco_cls_to_name(det_result->cls_id), det_result->prop,
                  x1, y1, x2, y2);
-        
-        // 绘制边界框 - 使用蓝色，参考rknn_infer
+
+        // 创建边界框
         QRect rect(x1, y1, x2 - x1, y2 - y1);
-        painter.setPen(QPen(QColor(0, 0, 255), 2)); // 蓝色边框 (COLOR_BLUE)
-        painter.drawRect(rect);
-        
-        // 绘制标签
-        QString confidence = QString::number(det_result->prop * 100, 'f', 1) + "%";
-        QString label = QString("%1 %2").arg(coco_cls_to_name(det_result->cls_id)).arg(confidence);
-        
-        QFontMetrics fm(painter.font());
-        QRect textRect = fm.boundingRect(label);
-        textRect.moveTo(rect.topLeft() - QPoint(0, textRect.height() + 2));
-        textRect.setWidth(textRect.width() + 4);
-        
-        // 填充标签背景 - 使用半透明白色，确保红色文字清晰可见
-        painter.fillRect(textRect, QColor(255, 255, 255, 200)); // 半透明白色背景
-        
-        // 绘制标签文字 - 使用红色，参考rknn_infer
-        painter.setPen(QColor(255, 0, 0)); // 红色文字 (COLOR_RED)
-        painter.drawText(textRect, Qt::AlignCenter, label);
+
+        // 使用颜色管理器绘制带颜色的检测框
+        DefectColorManager::drawDefectBox(painter, det_result->cls_id, rect, det_result->prop, coco_cls_to_name(det_result->cls_id));
     }
     
     painter.end();

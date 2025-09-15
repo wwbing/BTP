@@ -1,4 +1,5 @@
 #include "camerawindow.h"
+#include "defect_colors.h"
 #include <QPixmap>
 #include <QDateTime>
 #include <QFileInfo>
@@ -413,30 +414,18 @@ bool CameraWindow::runInference(const QImage &inputImage, QImage &outputImage)
     outputImage = rgbImage.copy();
 
     // 绘制检测结果
+    QPainter painter(&outputImage);
     for (int i = 0; i < detect_result.count; i++) {
         object_detect_result *det_result = &(detect_result.results[i]);
 
-        // 绘制边界框
+        // 创建边界框
         QRect box(det_result->box.left, det_result->box.top,
                   det_result->box.right - det_result->box.left,
                   det_result->box.bottom - det_result->box.top);
 
-        QPainter painter(&outputImage);
-        painter.setPen(QPen(Qt::blue, 2));
-        painter.drawRect(box);
-
-        // 绘制标签
-        char label[100];
+        // 使用颜色管理器绘制带颜色的检测框
         const char* class_name = coco_cls_to_name(det_result->cls_id);
-        snprintf(label, sizeof(label), "%s %.2f",
-                class_name ? class_name : "unknown", det_result->prop);
-
-        QRect textRect = box;
-        textRect.setHeight(20);
-
-        painter.fillRect(textRect, QColor(255, 255, 255, 180));
-        painter.setPen(Qt::red);
-        painter.drawText(textRect, Qt::AlignLeft | Qt::AlignVCenter, label);
+        DefectColorManager::drawDefectBox(painter, det_result->cls_id, box, det_result->prop, class_name);
     }
 
     return true;

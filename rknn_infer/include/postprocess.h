@@ -10,8 +10,8 @@
 #define OBJ_NAME_MAX_SIZE 64
 #define OBJ_NUMB_MAX_SIZE 128
 #define OBJ_CLASS_NUM 6
-#define NMS_THRESH 0.45
-#define BOX_THRESH 0.25
+#define NMS_THRESH 0.45			// 降低NMS阈值，减少重复框
+#define BOX_THRESH 0.5			// 提高置信度阈值，减少误检
 
 // class rknn_app_context_t;
 

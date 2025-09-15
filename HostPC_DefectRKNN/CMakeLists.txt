@@ -31,6 +31,7 @@ set(SOURCES
     src/main.cpp
     src/mainwindow.cpp
     src/camerawindow.cpp
+    src/defect_colors.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../rknn_infer/src/rknpu2/yolov6.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/../rknn_infer/src/postprocess.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/../rknn_infer/utils/file_utils.c

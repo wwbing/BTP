@@ -691,11 +691,11 @@ int convert_image(image_buffer_t* src_img, image_buffer_t* dst_img, image_rect_t
 #endif
             ret = convert_image_rga(src_img, dst_img, src_box, dst_box, color);
             if (ret != 0) {
-                printf("try convert image use cpu\n");
+                //printf("try convert image use cpu\n");
                 ret = convert_image_cpu(src_img, dst_img, src_box, dst_box, color);
             }
         } else {
-            printf("src width is not 4/16-aligned, convert image use cpu\n");
+            //printf("src width is not 4/16-aligned, convert image use cpu\n");
             ret = convert_image_cpu(src_img, dst_img, src_box, dst_box, color);
         }
     }

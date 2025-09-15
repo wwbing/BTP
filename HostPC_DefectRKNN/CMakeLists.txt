@@ -18,7 +18,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/stb_image)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/jpeg_turbo/include)
 
 # 查找Qt5包
-find_package(Qt5 REQUIRED COMPONENTS Core Widgets)
+find_package(Qt5 REQUIRED COMPONENTS Core Widgets Multimedia MultimediaWidgets)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
@@ -46,7 +46,7 @@ set(RKNN_LIB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../rknn_model_zoo-2.3.2/install/rk
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 
 # 链接Qt库
-target_link_libraries(${PROJECT_NAME} PRIVATE Qt5::Core Qt5::Widgets)
+target_link_libraries(${PROJECT_NAME} PRIVATE Qt5::Core Qt5::Widgets Qt5::Multimedia Qt5::MultimediaWidgets)
 
 # 不使用OpenCV，仅使用Qt的图像处理功能
 

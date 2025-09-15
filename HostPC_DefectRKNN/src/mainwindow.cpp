@@ -8,6 +8,13 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QColor>
+#include <QVideoWidget>
+#include <QMediaPlayer>
+#include <QVideoProbe>
+#include <QSlider>
+#include <QTimer>
+#include <QUrl>
+#include <QStackedLayout>
 // RKNN相关头文件
 #include "rknn_api.h"
 #include "yolov6.h"
@@ -17,10 +24,39 @@
 #include "common.h"
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), rknn_initialized(false)
+    : QMainWindow(parent), rknn_initialized(false), mediaPlayer(nullptr)
 {
     setupUI();
     initializeRKNN();
+
+    // 初始化媒体播放器
+    mediaPlayer = new QMediaPlayer(this);
+    videoTimer = new QTimer(this);
+
+    // 连接媒体播放器信号
+    connect(mediaPlayer, &QMediaPlayer::positionChanged, this, &MainWindow::updatePosition);
+    connect(mediaPlayer, &QMediaPlayer::durationChanged, this, &MainWindow::updateDuration);
+    connect(mediaPlayer, &QMediaPlayer::stateChanged, this, [this](QMediaPlayer::State state) {
+        if (state == QMediaPlayer::StoppedState) {
+            playButton->setEnabled(true);
+            pauseButton->setEnabled(false);
+            stopButton->setEnabled(false);
+            statusLabel->setText("视频已停止");
+        } else if (state == QMediaPlayer::PlayingState) {
+            playButton->setEnabled(false);
+            pauseButton->setEnabled(true);
+            stopButton->setEnabled(true);
+            statusLabel->setText("正在播放视频");
+        } else if (state == QMediaPlayer::PausedState) {
+            playButton->setEnabled(true);
+            pauseButton->setEnabled(false);
+            stopButton->setEnabled(true);
+            statusLabel->setText("视频已暂停");
+        }
+    });
+
+    // 连接视频定时器
+    connect(videoTimer, &QTimer::timeout, this, &MainWindow::updateVideoFrame);
 }
 
 MainWindow::~MainWindow()
@@ -28,6 +64,12 @@ MainWindow::~MainWindow()
     if (rknn_initialized) {
         release_yolov6_model((rknn_app_context_t*)rknn_app_ctx);
         free(rknn_app_ctx);
+    }
+
+    // 清理媒体播放器
+    if (mediaPlayer) {
+        mediaPlayer->stop();
+        delete mediaPlayer;
     }
 }
 
@@ -76,25 +118,41 @@ void MainWindow::setupUI()
     // 按钮行布局
     QHBoxLayout *buttonLayout1 = new QHBoxLayout();
     QHBoxLayout *buttonLayout2 = new QHBoxLayout();
+    QHBoxLayout *buttonLayout3 = new QHBoxLayout();
 
     openButton = createStyledButton("📁 打开图片", "#3498db");
     detectButton = createStyledButton("🔍 开始检测", "#e74c3c");
     openFolderButton = createStyledButton("📂 选择文件夹", "#9b59b6");
     batchDetectButton = createStyledButton("⚡ 批量检测", "#f39c12");
 
+    // 视频相关按钮
+    openVideoButton = createStyledButton("🎬 打开视频", "#27ae60");
+    playButton = createStyledButton("▶️ 播放", "#2ecc71");
+    pauseButton = createStyledButton("⏸️ 暂停", "#f39c12");
+    stopButton = createStyledButton("⏹️ 停止", "#e74c3c");
+
     detectButton->setEnabled(false);
     batchDetectButton->setEnabled(false);
+    playButton->setEnabled(false);
+    pauseButton->setEnabled(false);
+    stopButton->setEnabled(false);
 
     buttonLayout1->addWidget(openButton);
     buttonLayout1->addWidget(detectButton);
     buttonLayout2->addWidget(openFolderButton);
     buttonLayout2->addWidget(batchDetectButton);
+    buttonLayout3->addWidget(openVideoButton);
+    buttonLayout3->addWidget(playButton);
+    buttonLayout3->addWidget(pauseButton);
+    buttonLayout3->addWidget(stopButton);
 
     buttonLayout1->setSpacing(20);
     buttonLayout2->setSpacing(20);
+    buttonLayout3->setSpacing(15);
 
     controlLayout->addLayout(buttonLayout1);
     controlLayout->addLayout(buttonLayout2);
+    controlLayout->addLayout(buttonLayout3);
 
     // 创建图像显示区域
     QWidget *imageContainer = new QWidget();
@@ -110,6 +168,9 @@ void MainWindow::setupUI()
 
     QVBoxLayout *imageLayout = new QVBoxLayout(imageContainer);
     imageLayout->setContentsMargins(15, 15, 15, 15);
+
+    // 创建堆叠布局，用于在图片和视频之间切换
+    stackedLayout = new QStackedLayout();
 
     imageLabel = new QLabel(this);
     imageLabel->setAlignment(Qt::AlignCenter);
@@ -127,7 +188,53 @@ void MainWindow::setupUI()
         "}"
     );
 
-    imageLayout->addWidget(imageLabel);
+    // 创建视频播放器
+    videoWidget = new QVideoWidget(this);
+    videoWidget->setMinimumSize(800, 500);
+    videoWidget->setStyleSheet(
+        "QVideoWidget {"
+        "   border: 2px solid #bdc3c7;"
+        "   border-radius: 8px;"
+        "   background: #000000;"
+        "}"
+    );
+
+    stackedLayout->addWidget(imageLabel);
+    stackedLayout->addWidget(videoWidget);
+    imageLayout->addLayout(stackedLayout);
+
+    // 创建视频进度控制区域
+    QWidget *progressContainer = new QWidget();
+    QHBoxLayout *progressLayout = new QHBoxLayout(progressContainer);
+    progressLayout->setContentsMargins(0, 10, 0, 0);
+
+    positionSlider = new QSlider(Qt::Horizontal, this);
+    positionSlider->setRange(0, 0);
+    positionSlider->setMinimumWidth(400);
+    positionSlider->setStyleSheet(
+        "QSlider::groove:horizontal {"
+        "   border: 1px solid #bbb;"
+        "   background: white;"
+        "   height: 8px;"
+        "   border-radius: 4px;"
+        "}"
+        "QSlider::handle:horizontal {"
+        "   background: #3498db;"
+        "   border: 1px solid #5c6bc0;"
+        "   width: 18px;"
+        "   margin: -5px 0;"
+        "   border-radius: 9px;"
+        "}"
+    );
+
+    timeLabel = new QLabel("00:00 / 00:00", this);
+    timeLabel->setStyleSheet("color: #7f8c8d; font-size: 12px;");
+
+    progressLayout->addWidget(positionSlider);
+    progressLayout->addWidget(timeLabel);
+    progressLayout->setStretch(0, 1);
+
+    imageLayout->addWidget(progressContainer);
 
     // 创建状态栏
     QWidget *statusBar = new QWidget();
@@ -172,6 +279,13 @@ void MainWindow::setupUI()
     connect(detectButton, &QPushButton::clicked, this, &MainWindow::detectDefects);
     connect(openFolderButton, &QPushButton::clicked, this, &MainWindow::openFolder);
     connect(batchDetectButton, &QPushButton::clicked, this, &MainWindow::batchDetect);
+
+    // 视频相关信号槽连接
+    connect(openVideoButton, &QPushButton::clicked, this, &MainWindow::openVideo);
+    connect(playButton, &QPushButton::clicked, this, &MainWindow::playVideo);
+    connect(pauseButton, &QPushButton::clicked, this, &MainWindow::pauseVideo);
+    connect(stopButton, &QPushButton::clicked, this, &MainWindow::stopVideo);
+    connect(positionSlider, &QSlider::sliderMoved, this, &MainWindow::setPosition);
 
     // 设置窗口属性
     setWindowTitle("RKNN 智能缺陷检测系统");
@@ -285,15 +399,18 @@ void MainWindow::loadImage(const QString &path)
 {
     currentImagePath = path;
     QPixmap pixmap(path);
-    
+
     if (pixmap.isNull()) {
         QMessageBox::warning(this, "错误", "无法加载图片文件");
         return;
     }
 
+    // 切换到图片显示
+    stackedLayout->setCurrentWidget(imageLabel);
+
     // 缩放图片以适应标签
-    QPixmap scaledPixmap = pixmap.scaled(imageLabel->size(), 
-                                       Qt::KeepAspectRatio, 
+    QPixmap scaledPixmap = pixmap.scaled(imageLabel->size(),
+                                       Qt::KeepAspectRatio,
                                        Qt::SmoothTransformation);
     imageLabel->setPixmap(scaledPixmap);
     detectButton->setEnabled(true);
@@ -564,4 +681,113 @@ void MainWindow::processFolder(const QString &folderPath)
 bool MainWindow::saveResultImage(const QImage &image, const QString &outputPath)
 {
     return image.save(outputPath, "JPEG", 90); // 使用JPEG格式，质量90%
+}
+
+// 视频相关功能实现
+void MainWindow::openVideo()
+{
+    QString fileName = QFileDialog::getOpenFileName(this,
+        tr("选择视频文件"),
+        "",
+        tr("视频文件 (*.mp4 *.avi *.mkv *.mov *.wmv *.flv);;所有文件 (*.*)"));
+
+    if (!fileName.isEmpty()) {
+        currentVideoPath = fileName;
+
+        // 加载视频文件
+        mediaPlayer->setMedia(QUrl::fromLocalFile(fileName));
+        mediaPlayer->setVideoOutput(videoWidget);
+
+        // 切换到视频显示
+        stackedLayout->setCurrentWidget(videoWidget);
+
+        // 启用播放控制按钮
+        playButton->setEnabled(true);
+        pauseButton->setEnabled(false);
+        stopButton->setEnabled(false);
+
+        statusLabel->setText(QString("🎬 已加载视频: %1").arg(QFileInfo(fileName).fileName()));
+    }
+}
+
+void MainWindow::playVideo()
+{
+    if (currentVideoPath.isEmpty()) {
+        QMessageBox::warning(this, "错误", "请先选择视频文件");
+        return;
+    }
+
+    if (mediaPlayer->state() == QMediaPlayer::PausedState) {
+        mediaPlayer->play();
+    } else {
+        mediaPlayer->play();
+    }
+}
+
+void MainWindow::pauseVideo()
+{
+    if (mediaPlayer->state() == QMediaPlayer::PlayingState) {
+        mediaPlayer->pause();
+    }
+}
+
+void MainWindow::stopVideo()
+{
+    mediaPlayer->stop();
+    positionSlider->setValue(0);
+    updateTimeLabel(0, mediaPlayer->duration());
+}
+
+void MainWindow::updatePosition(qint64 position)
+{
+    positionSlider->setValue(position);
+    updateTimeLabel(position, mediaPlayer->duration());
+}
+
+void MainWindow::updateDuration(qint64 duration)
+{
+    positionSlider->setRange(0, duration);
+    updateTimeLabel(mediaPlayer->position(), duration);
+}
+
+void MainWindow::setPosition(int position)
+{
+    mediaPlayer->setPosition(position);
+}
+
+void MainWindow::updateVideoFrame()
+{
+    // 这个函数用于更新视频帧，暂时不需要实现
+    // 如果需要后续添加视频帧处理功能可以在这里实现
+}
+
+void MainWindow::updateTimeLabel(qint64 current, qint64 total)
+{
+    QString currentTime = formatTime(current);
+    QString totalTime = formatTime(total);
+    timeLabel->setText(QString("%1 / %2").arg(currentTime).arg(totalTime));
+}
+
+QString MainWindow::formatTime(qint64 milliseconds)
+{
+    if (milliseconds < 0) {
+        return "00:00";
+    }
+
+    qint64 seconds = milliseconds / 1000;
+    qint64 minutes = seconds / 60;
+    seconds = seconds % 60;
+    qint64 hours = minutes / 60;
+    minutes = minutes % 60;
+
+    if (hours > 0) {
+        return QString("%1:%2:%3")
+            .arg(hours, 2, 10, QLatin1Char('0'))
+            .arg(minutes, 2, 10, QLatin1Char('0'))
+            .arg(seconds, 2, 10, QLatin1Char('0'));
+    } else {
+        return QString("%1:%2")
+            .arg(minutes, 2, 10, QLatin1Char('0'))
+            .arg(seconds, 2, 10, QLatin1Char('0'));
+    }
 }

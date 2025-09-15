@@ -17,6 +17,11 @@
 #include <QSlider>
 #include <QTimer>
 #include <QStackedLayout>
+#include <QThread>
+#include <QQueue>
+#include <QMutex>
+#include <QWaitCondition>
+#include <QVideoFrame>
 // RKNN相关头文件将在cpp文件中包含
 
 class MainWindow : public QMainWindow
@@ -40,6 +45,9 @@ private slots:
     void updateDuration(qint64 duration);
     void setPosition(int position);
     void updateVideoFrame();
+    void toggleVideoInference();
+    void processVideoFrame(const QVideoFrame &frame);
+    void displayInferenceResult(const QImage &resultImage);
 
 private:
     void setupUI();
@@ -54,6 +62,10 @@ private:
     bool saveResultImage(const QImage &image, const QString &originalPath);
     QString formatTime(qint64 milliseconds);
     void updateTimeLabel(qint64 current, qint64 total);
+    QImage videoFrameToImage(const QVideoFrame &frame);
+    void initVideoInference();
+    void startVideoInference();
+    void stopVideoInference();
 
     // UI组件
     QPushButton *openButton;
@@ -64,13 +76,16 @@ private:
     QPushButton *playButton;
     QPushButton *pauseButton;
     QPushButton *stopButton;
+    QPushButton *inferenceButton;
     QLabel *imageLabel;
     QLabel *statusLabel;
+    QLabel *inferenceStatusLabel;
     QVideoWidget *videoWidget;
     QSlider *positionSlider;
     QLabel *timeLabel;
     QTimer *videoTimer;
     QStackedLayout *stackedLayout;
+    QLabel *inferenceResultLabel;
 
     // 当前图片路径
     QString currentImagePath;
@@ -85,6 +100,19 @@ private:
 
     // 视频播放相关
     QMediaPlayer *mediaPlayer;
+
+    // 视频推理相关
+    QVideoProbe *videoProbe;
+    QThread *inferenceThread;
+    bool videoInferenceEnabled;
+    bool isProcessingFrame;
+    int inferenceFrameCount;
+    int totalDetectionCount;
+    QMutex inferenceMutex;
+    QWaitCondition frameCondition;
+    QQueue<QVideoFrame> frameQueue;
+    const int MAX_QUEUE_SIZE = 3;
+    const int INFERENCE_INTERVAL_MS = 100; // 推理间隔100ms
 };
 
 #endif // MAINWINDOW_H

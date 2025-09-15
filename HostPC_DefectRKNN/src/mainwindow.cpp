@@ -15,6 +15,7 @@
 #include <QTimer>
 #include <QUrl>
 #include <QStackedLayout>
+#include <QDateTime>
 // RKNN相关头文件
 #include "rknn_api.h"
 #include "yolov6.h"
@@ -24,7 +25,7 @@
 #include "common.h"
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), rknn_initialized(false), mediaPlayer(nullptr)
+    : QMainWindow(parent), rknn_initialized(false), mediaPlayer(nullptr), videoProbe(nullptr), inferenceThread(nullptr), videoInferenceEnabled(false), isProcessingFrame(false), inferenceFrameCount(0), totalDetectionCount(0)
 {
     setupUI();
     initializeRKNN();
@@ -32,6 +33,9 @@ MainWindow::MainWindow(QWidget *parent)
     // 初始化媒体播放器
     mediaPlayer = new QMediaPlayer(this);
     videoTimer = new QTimer(this);
+
+    // 初始化视频推理相关组件
+    initVideoInference();
 
     // 连接媒体播放器信号
     connect(mediaPlayer, &QMediaPlayer::positionChanged, this, &MainWindow::updatePosition);
@@ -59,6 +63,23 @@ MainWindow::MainWindow(QWidget *parent)
     connect(videoTimer, &QTimer::timeout, this, &MainWindow::updateVideoFrame);
 }
 
+void MainWindow::initVideoInference()
+{
+    // 创建视频探测器
+    videoProbe = new QVideoProbe(this);
+
+    // 连接到媒体播放器
+    if (videoProbe->setSource(mediaPlayer)) {
+        connect(videoProbe, &QVideoProbe::videoFrameProbed, this, &MainWindow::processVideoFrame);
+        qDebug() << "Video probe connected successfully";
+    } else {
+        qDebug() << "Failed to connect video probe, will use fallback method";
+    }
+
+    // 设置定时器用于备用帧捕获
+    videoTimer->setInterval(100); // 100ms间隔
+}
+
 MainWindow::~MainWindow()
 {
     if (rknn_initialized) {
@@ -66,10 +87,18 @@ MainWindow::~MainWindow()
         free(rknn_app_ctx);
     }
 
+    // 停止视频推理
+    stopVideoInference();
+
     // 清理媒体播放器
     if (mediaPlayer) {
         mediaPlayer->stop();
         delete mediaPlayer;
+    }
+
+    // 清理视频探测器
+    if (videoProbe) {
+        delete videoProbe;
     }
 }
 
@@ -130,12 +159,14 @@ void MainWindow::setupUI()
     playButton = createStyledButton("▶️ 播放", "#2ecc71");
     pauseButton = createStyledButton("⏸️ 暂停", "#f39c12");
     stopButton = createStyledButton("⏹️ 停止", "#e74c3c");
+    inferenceButton = createStyledButton("🤖 开始推理", "#9b59b6");
 
     detectButton->setEnabled(false);
     batchDetectButton->setEnabled(false);
     playButton->setEnabled(false);
     pauseButton->setEnabled(false);
     stopButton->setEnabled(false);
+    inferenceButton->setEnabled(false);
 
     buttonLayout1->addWidget(openButton);
     buttonLayout1->addWidget(detectButton);
@@ -145,6 +176,7 @@ void MainWindow::setupUI()
     buttonLayout3->addWidget(playButton);
     buttonLayout3->addWidget(pauseButton);
     buttonLayout3->addWidget(stopButton);
+    buttonLayout3->addWidget(inferenceButton);
 
     buttonLayout1->setSpacing(20);
     buttonLayout2->setSpacing(20);
@@ -199,8 +231,26 @@ void MainWindow::setupUI()
         "}"
     );
 
+    // 创建推理结果显示标签
+    inferenceResultLabel = new QLabel(this);
+    inferenceResultLabel->setAlignment(Qt::AlignCenter);
+    inferenceResultLabel->setMinimumSize(800, 500);
+    inferenceResultLabel->setStyleSheet(
+        "QLabel {"
+        "   border: 2px solid #3498db;"
+        "   border-radius: 8px;"
+        "   background: #f8f9fa;"
+        "   color: #7f8c8d;"
+        "   font-size: 16px;"
+        "}"
+        "QLabel:!pixmap {"
+        "   qproperty-text: '推理结果将在这里显示';"
+        "}"
+    );
+
     stackedLayout->addWidget(imageLabel);
     stackedLayout->addWidget(videoWidget);
+    stackedLayout->addWidget(inferenceResultLabel);
     imageLayout->addLayout(stackedLayout);
 
     // 创建视频进度控制区域
@@ -257,6 +307,15 @@ void MainWindow::setupUI()
     );
     statusLabel->setAlignment(Qt::AlignLeft);
 
+    // 添加推理状态信息
+    inferenceStatusLabel = new QLabel("推理: 未启动");
+    inferenceStatusLabel->setStyleSheet(
+        "color: #3498db;"
+        "font-size: 12px;"
+        "font-weight: 500;"
+    );
+    inferenceStatusLabel->setAlignment(Qt::AlignCenter);
+
     // 添加右侧信息
     QLabel *versionLabel = new QLabel("v1.0 | RK3588 多核心");
     versionLabel->setStyleSheet(
@@ -265,7 +324,8 @@ void MainWindow::setupUI()
     );
     versionLabel->setAlignment(Qt::AlignRight);
 
-    statusLayout->addWidget(statusLabel, 3);
+    statusLayout->addWidget(statusLabel, 2);
+    statusLayout->addWidget(inferenceStatusLabel, 1);
     statusLayout->addWidget(versionLabel, 1);
 
     // 添加所有组件到主布局
@@ -286,6 +346,7 @@ void MainWindow::setupUI()
     connect(pauseButton, &QPushButton::clicked, this, &MainWindow::pauseVideo);
     connect(stopButton, &QPushButton::clicked, this, &MainWindow::stopVideo);
     connect(positionSlider, &QSlider::sliderMoved, this, &MainWindow::setPosition);
+    connect(inferenceButton, &QPushButton::clicked, this, &MainWindow::toggleVideoInference);
 
     // 设置窗口属性
     setWindowTitle("RKNN 智能缺陷检测系统");
@@ -362,12 +423,14 @@ void MainWindow::initializeRKNN()
     // 设置工作目录到可执行文件所在目录，确保能找到标签文件
     QString originalDir = QDir::currentPath();
     QDir::setCurrent(QCoreApplication::applicationDirPath());
-    
+
     // 初始化后处理
     init_post_process();
-    
+
     // 恢复原始工作目录
     QDir::setCurrent(originalDir);
+
+    qDebug() << "Post process initialized, labels should be loaded";
     
     // 初始化RKNN模型
     int ret = init_yolov6_model(model_path, (rknn_app_context_t*)rknn_app_ctx);
@@ -451,22 +514,32 @@ bool MainWindow::runRKNNInference(const QImage &inputImage, QImage &outputImage)
     if (!rknn_initialized) {
         return false;
     }
-    
+
     // 创建图像缓冲区
     image_buffer_t src_image;
     memset(&src_image, 0, sizeof(image_buffer_t));
-    
-    // 使用read_image函数读取图像（参考rknn_infer实现）
-    QByteArray imagePathBytes = currentImagePath.toUtf8();
-    int ret = read_image(imagePathBytes.constData(), &src_image);
-    if (ret != 0) {
-        qDebug() << "读取图像失败";
+
+    // 直接使用传入的QImage数据
+    QImage rgbImage = inputImage.convertToFormat(QImage::Format_RGB888);
+    src_image.width = rgbImage.width();
+    src_image.height = rgbImage.height();
+    src_image.format = IMAGE_FORMAT_RGB888;
+    src_image.virt_addr = (unsigned char*)malloc(rgbImage.width() * rgbImage.height() * 3);
+    src_image.size = rgbImage.width() * rgbImage.height() * 3;
+
+    if (src_image.virt_addr == NULL) {
+        qDebug() << "Failed to allocate memory for image buffer";
         return false;
     }
-    
+
+    // 复制QImage数据到图像缓冲区
+    memcpy(src_image.virt_addr, rgbImage.constBits(), src_image.size);
+
+    qDebug() << "Created image buffer from QImage:" << src_image.width << "x" << src_image.height;
+
     // 运行RKNN推理
     object_detect_result_list od_results;
-    ret = inference_yolov6_model((rknn_app_context_t*)rknn_app_ctx, &src_image, &od_results);
+    int ret = inference_yolov6_model((rknn_app_context_t*)rknn_app_ctx, &src_image, &od_results);
     if (ret != 0) {
         qDebug() << "RKNN推理失败";
         // 释放图像内存
@@ -694,6 +767,9 @@ void MainWindow::openVideo()
     if (!fileName.isEmpty()) {
         currentVideoPath = fileName;
 
+        // 停止之前的推理
+        stopVideoInference();
+
         // 加载视频文件
         mediaPlayer->setMedia(QUrl::fromLocalFile(fileName));
         mediaPlayer->setVideoOutput(videoWidget);
@@ -705,6 +781,7 @@ void MainWindow::openVideo()
         playButton->setEnabled(true);
         pauseButton->setEnabled(false);
         stopButton->setEnabled(false);
+        inferenceButton->setEnabled(true);
 
         statusLabel->setText(QString("🎬 已加载视频: %1").arg(QFileInfo(fileName).fileName()));
     }
@@ -757,8 +834,52 @@ void MainWindow::setPosition(int position)
 
 void MainWindow::updateVideoFrame()
 {
-    // 这个函数用于更新视频帧，暂时不需要实现
-    // 如果需要后续添加视频帧处理功能可以在这里实现
+    // 备用方案：从videoWidget截图进行推理
+    if (!videoInferenceEnabled || !rknn_initialized) {
+        return;
+    }
+
+    // 检查是否正在处理上一帧
+    if (isProcessingFrame) {
+        return;
+    }
+
+    // 从videoWidget截图
+    QPixmap pixmap = videoWidget->grab();
+    if (pixmap.isNull()) {
+        qDebug() << "Failed to grab video widget";
+        return;
+    }
+
+    QImage image = pixmap.toImage();
+    if (image.isNull()) {
+        qDebug() << "Failed to convert pixmap to image";
+        return;
+    }
+
+    qDebug() << "Backup capture: grabbed image size:" << image.size() << "format:" << image.format();
+
+    // 设置处理标志
+    isProcessingFrame = true;
+
+    // 执行RKNN推理
+    QImage resultImage;
+    if (runRKNNInference(image, resultImage)) {
+        // 显示推理结果
+        displayInferenceResult(resultImage);
+
+        // 更新统计信息
+        inferenceFrameCount++;
+        totalDetectionCount++;
+
+        // 每10帧更新一次状态显示
+        if (inferenceFrameCount % 10 == 0) {
+            inferenceStatusLabel->setText(QString("推理: 运行中 (%1帧)").arg(inferenceFrameCount));
+        }
+    }
+
+    // 重置处理标志
+    isProcessingFrame = false;
 }
 
 void MainWindow::updateTimeLabel(qint64 current, qint64 total)
@@ -790,4 +911,198 @@ QString MainWindow::formatTime(qint64 milliseconds)
             .arg(minutes, 2, 10, QLatin1Char('0'))
             .arg(seconds, 2, 10, QLatin1Char('0'));
     }
+}
+
+// 视频推理相关功能实现
+void MainWindow::toggleVideoInference()
+{
+    if (!rknn_initialized) {
+        QMessageBox::warning(this, "错误", "RKNN模型未初始化");
+        return;
+    }
+
+    if (currentVideoPath.isEmpty()) {
+        QMessageBox::warning(this, "错误", "请先选择视频文件");
+        return;
+    }
+
+    if (videoInferenceEnabled) {
+        stopVideoInference();
+    } else {
+        startVideoInference();
+    }
+}
+
+void MainWindow::startVideoInference()
+{
+    videoInferenceEnabled = true;
+    inferenceFrameCount = 0;
+    totalDetectionCount = 0;
+
+    // 更新按钮状态
+    inferenceButton->setText("🛑 停止推理");
+    inferenceButton->setStyleSheet(inferenceButton->styleSheet().replace("#9b59b6", "#e74c3c"));
+
+    // 更新状态显示
+    inferenceStatusLabel->setText("推理: 运行中");
+    inferenceStatusLabel->setStyleSheet("color: #2ecc71; font-size: 12px; font-weight: 500;");
+
+    statusLabel->setText("🤖 视频推理已启动");
+
+    // 启动备用捕获定时器
+    if (!videoTimer->isActive()) {
+        videoTimer->start(INFERENCE_INTERVAL_MS);
+        qDebug() << "Started backup video capture timer";
+    }
+
+    qDebug() << "Video inference started";
+}
+
+void MainWindow::stopVideoInference()
+{
+    videoInferenceEnabled = false;
+
+    // 停止备用捕获定时器
+    if (videoTimer->isActive()) {
+        videoTimer->stop();
+        qDebug() << "Stopped backup video capture timer";
+    }
+
+    // 清空帧队列
+    QMutexLocker locker(&inferenceMutex);
+    frameQueue.clear();
+    locker.unlock();
+
+    // 唤醒可能等待的线程
+    frameCondition.wakeAll();
+
+    // 更新按钮状态
+    inferenceButton->setText("🤖 开始推理");
+    inferenceButton->setStyleSheet(inferenceButton->styleSheet().replace("#e74c3c", "#9b59b6"));
+
+    // 更新状态显示
+    inferenceStatusLabel->setText(QString("推理: 已停止 (处理%1帧)").arg(inferenceFrameCount));
+    inferenceStatusLabel->setStyleSheet("color: #e74c3c; font-size: 12px; font-weight: 500;");
+
+    statusLabel->setText(QString("⏹️ 视频推理已停止 - 处理%1帧").arg(inferenceFrameCount));
+
+    qDebug() << "Video inference stopped";
+}
+
+void MainWindow::processVideoFrame(const QVideoFrame &frame)
+{
+    if (!videoInferenceEnabled || !rknn_initialized) {
+        return;
+    }
+
+    // 检查是否正在处理上一帧
+    if (isProcessingFrame) {
+        return; // 跳过，等待上一帧处理完成
+    }
+
+    // 转换帧为图像进行推理
+    QImage image = videoFrameToImage(frame);
+    if (image.isNull()) {
+        qDebug() << "QVideoProbe failed - backup timer will handle capture";
+        return;
+    }
+
+    qDebug() << "QVideoProbe succeeded - image size:" << image.size() << "format:" << image.format();
+
+    // 停止备用定时器，因为QVideoProbe在工作
+    if (videoTimer->isActive()) {
+        videoTimer->stop();
+        qDebug() << "Stopped backup timer - QVideoProbe is working";
+    }
+
+    // 设置处理标志
+    isProcessingFrame = true;
+
+    // 执行RKNN推理
+    QImage resultImage;
+    if (runRKNNInference(image, resultImage)) {
+        // 显示推理结果
+        displayInferenceResult(resultImage);
+
+        // 更新统计信息
+        inferenceFrameCount++;
+        totalDetectionCount++;
+
+        // 每10帧更新一次状态显示
+        if (inferenceFrameCount % 10 == 0) {
+            inferenceStatusLabel->setText(QString("推理: 运行中 (%1帧)").arg(inferenceFrameCount));
+        }
+    }
+
+    // 重置处理标志
+    isProcessingFrame = false;
+}
+
+void MainWindow::displayInferenceResult(const QImage &resultImage)
+{
+    // 切换到推理结果显示
+    stackedLayout->setCurrentWidget(inferenceResultLabel);
+
+    // 缩放图片以适应标签
+    QPixmap pixmap = QPixmap::fromImage(resultImage);
+    QPixmap scaledPixmap = pixmap.scaled(inferenceResultLabel->size(),
+                                       Qt::KeepAspectRatio,
+                                       Qt::SmoothTransformation);
+    inferenceResultLabel->setPixmap(scaledPixmap);
+}
+
+QImage MainWindow::videoFrameToImage(const QVideoFrame &frame)
+{
+    if (!frame.isValid()) {
+        qDebug() << "Invalid video frame";
+        return QImage();
+    }
+
+    QVideoFrame cloneFrame(frame);
+    if (!cloneFrame.map(QAbstractVideoBuffer::ReadOnly)) {
+        qDebug() << "Failed to map video frame";
+        return QImage();
+    }
+
+    // 获取帧格式信息
+    QVideoFrame::PixelFormat pixelFormat = cloneFrame.pixelFormat();
+    QSize size = cloneFrame.size();
+
+    qDebug() << "Video frame format:" << pixelFormat << "size:" << size;
+
+    QImage image;
+
+    // 尝试使用QVideoFrame的内置转换功能
+    image = cloneFrame.image();
+
+    if (image.isNull()) {
+        qDebug() << "QVideoFrame::image() failed, trying manual conversion";
+
+        // 手动转换常见格式
+        if (pixelFormat == QVideoFrame::Format_RGB32) {
+            image = QImage(cloneFrame.bits(),
+                         size.width(),
+                         size.height(),
+                         cloneFrame.bytesPerLine(),
+                         QImage::Format_RGB32);
+        } else if (pixelFormat == QVideoFrame::Format_ARGB32) {
+            image = QImage(cloneFrame.bits(),
+                         size.width(),
+                         size.height(),
+                         cloneFrame.bytesPerLine(),
+                         QImage::Format_ARGB32);
+        } else {
+            qDebug() << "Unsupported pixel format:" << pixelFormat;
+        }
+    }
+
+    cloneFrame.unmap();
+
+    if (image.isNull()) {
+        qDebug() << "Failed to convert video frame to image";
+        return QImage();
+    }
+
+    qDebug() << "Successfully converted frame to image:" << image.size() << "format:" << image.format();
+    return image.copy(); // 返回副本以避免内存问题
 }

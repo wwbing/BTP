@@ -3,6 +3,8 @@
 #include <QDateTime>
 #include <QFileInfo>
 #include <QDir>
+#include <QPainter>
+#include <QString>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
@@ -10,6 +12,7 @@
 #include <linux/videodev2.h>
 #include <cstring>
 #include <cstdlib>
+#include <sys/stat.h>
 
 CameraWindow::CameraWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -20,8 +23,13 @@ CameraWindow::CameraWindow(QWidget *parent)
     width = 1280;
     height = 720;
     isRunning = false;
+    detectEnabled = false;
     devicePath = "/dev/video0";
     bufferLength = 0;
+
+    // RKNN相关初始化
+    rknn_app_ctx = nullptr;
+    rknn_initialized = false;
 
     // 清零bufferInfo结构体
     memset(&bufferInfo, 0, sizeof(bufferInfo));
@@ -38,6 +46,20 @@ CameraWindow::CameraWindow(QWidget *parent)
 CameraWindow::~CameraWindow()
 {
     closeCamera();
+
+    // 清理RKNN资源
+    if (rknn_app_ctx) {
+        if (rknn_app_ctx->input_attrs) {
+            free(rknn_app_ctx->input_attrs);
+        }
+        if (rknn_app_ctx->output_attrs) {
+            free(rknn_app_ctx->output_attrs);
+        }
+        release_yolov6_model(rknn_app_ctx);
+        free(rknn_app_ctx);
+        rknn_app_ctx = nullptr;
+    }
+
     spdlog::info("CameraWindow析构完成");
 }
 
@@ -65,15 +87,18 @@ void CameraWindow::setupUI()
     QHBoxLayout *buttonLayout = new QHBoxLayout(buttonWidget);
 
     startStopButton = new QPushButton("开始预览", this);
+    detectButton = new QPushButton("开始检测", this);
     backButton = new QPushButton("返回", this);
 
     buttonLayout->addWidget(startStopButton);
+    buttonLayout->addWidget(detectButton);
     buttonLayout->addWidget(backButton);
 
     mainLayout->addWidget(buttonWidget);
 
     // 连接信号槽
     connect(startStopButton, &QPushButton::clicked, this, &CameraWindow::onStartStopClicked);
+    connect(detectButton, &QPushButton::clicked, this, &CameraWindow::onDetectClicked);
     connect(backButton, &QPushButton::clicked, this, &CameraWindow::close);
 
     // 创建定时器
@@ -196,6 +221,14 @@ void CameraWindow::captureFrame()
         // 使用MJPG解码
         QByteArray jpegData((const char*)buffer, bufferInfo.bytesused);
         if (image.loadFromData(jpegData, "JPEG")) {
+            // 如果检测功能已启用且RKNN已初始化，则执行推理
+            if (detectEnabled && rknn_initialized) {
+                QImage resultImage;
+                if (runInference(image, resultImage)) {
+                    image = resultImage; // 使用带检测框的图像
+                }
+            }
+
             // 显示图像
             if (!image.isNull()) {
                 QPixmap pixmap = QPixmap::fromImage(image);
@@ -258,7 +291,7 @@ void CameraWindow::onStartStopClicked()
         }
 
         isRunning = true;
-        captureTimer->start(33); // 约30fps
+        captureTimer->start(16); // 约60fps
         startStopButton->setText("停止预览");
         spdlog::info("开始摄像头预览");
     } else {
@@ -278,4 +311,148 @@ void CameraWindow::onStartStopClicked()
 void CameraWindow::onTimerTimeout()
 {
     captureFrame();
+}
+
+bool CameraWindow::initRKNN()
+{
+    spdlog::info("开始初始化RKNN模型");
+
+    // 分配RKNN应用上下文
+    rknn_app_ctx = (rknn_app_context_t*)malloc(sizeof(rknn_app_context_t));
+    if (!rknn_app_ctx) {
+        spdlog::error("分配RKNN应用上下文失败");
+        return false;
+    }
+    memset(rknn_app_ctx, 0, sizeof(rknn_app_context_t));
+
+    // 计算模型路径
+    char exePath[1024];
+    memset(exePath, 0, sizeof(exePath));
+    if (readlink("/proc/self/exe", exePath, sizeof(exePath) - 1) == -1) {
+        spdlog::error("获取可执行文件路径失败");
+        free(rknn_app_ctx);
+        rknn_app_ctx = nullptr;
+        return false;
+    }
+
+    std::string exeDir = exePath;
+    size_t lastSlash = exeDir.find_last_of('/');
+    if (lastSlash != std::string::npos) {
+        exeDir = exeDir.substr(0, lastSlash);
+    }
+
+    std::string modelPath = exeDir + "/../model/neu-det-new.rknn";
+
+    // 检查模型文件是否存在
+    struct stat buffer;
+    if (stat(modelPath.c_str(), &buffer) != 0) {
+        spdlog::error("模型文件不存在: {}", modelPath);
+        free(rknn_app_ctx);
+        rknn_app_ctx = nullptr;
+        return false;
+    }
+
+    spdlog::info("使用模型路径: {}", modelPath);
+
+    // 禁用RGA加速，避免RGA相关问题
+    setenv("RGA_DISABLE", "1", 1);
+    spdlog::info("已禁用RGA加速，使用CPU处理图像");
+
+    // 初始化后处理模块
+    if (init_post_process() != 0) {
+        spdlog::error("初始化后处理模块失败");
+        free(rknn_app_ctx);
+        rknn_app_ctx = nullptr;
+        return false;
+    }
+
+    // 初始化YOLOv6模型
+    if (init_yolov6_model(modelPath.c_str(), rknn_app_ctx) != 0) {
+        spdlog::error("初始化YOLOv6模型失败");
+        deinit_post_process();
+        free(rknn_app_ctx);
+        rknn_app_ctx = nullptr;
+        return false;
+    }
+
+    spdlog::info("RKNN模型初始化成功");
+    rknn_initialized = true;
+    return true;
+}
+
+bool CameraWindow::runInference(const QImage &inputImage, QImage &outputImage)
+{
+    if (!rknn_initialized || !rknn_app_ctx) {
+        return false;
+    }
+
+    // 创建图像缓冲区
+    image_buffer_t src_image;
+    memset(&src_image, 0, sizeof(image_buffer_t));
+
+    // 转换输入图像为RGB888格式
+    QImage rgbImage = inputImage.convertToFormat(QImage::Format_RGB888);
+    src_image.width = rgbImage.width();
+    src_image.height = rgbImage.height();
+    src_image.format = IMAGE_FORMAT_RGB888;
+
+    // 直接使用QImage的数据指针，避免额外的内存分配和复制
+    src_image.virt_addr = (unsigned char*)rgbImage.bits();
+
+    // 执行推理
+    object_detect_result_list detect_result;
+    memset(&detect_result, 0, sizeof(object_detect_result_list));
+
+    int ret = inference_yolov6_model(rknn_app_ctx, &src_image, &detect_result);
+    if (ret != 0) {
+        spdlog::error("YOLOv6推理失败");
+        return false;
+    }
+
+    // 复制输入图像用于绘制结果
+    outputImage = rgbImage.copy();
+
+    // 绘制检测结果
+    for (int i = 0; i < detect_result.count; i++) {
+        object_detect_result *det_result = &(detect_result.results[i]);
+
+        // 绘制边界框
+        QRect box(det_result->box.left, det_result->box.top,
+                  det_result->box.right - det_result->box.left,
+                  det_result->box.bottom - det_result->box.top);
+
+        QPainter painter(&outputImage);
+        painter.setPen(QPen(Qt::blue, 2));
+        painter.drawRect(box);
+
+        // 绘制标签
+        char label[100];
+        const char* class_name = coco_cls_to_name(det_result->cls_id);
+        snprintf(label, sizeof(label), "%s %.2f",
+                class_name ? class_name : "unknown", det_result->prop);
+
+        QRect textRect = box;
+        textRect.setHeight(20);
+
+        painter.fillRect(textRect, QColor(255, 255, 255, 180));
+        painter.setPen(Qt::red);
+        painter.drawText(textRect, Qt::AlignLeft | Qt::AlignVCenter, label);
+    }
+
+    return true;
+}
+
+void CameraWindow::onDetectClicked()
+{
+    if (!rknn_initialized) {
+        // 初始化RKNN模型
+        if (!initRKNN()) {
+            cameraView->setText("RKNN模型初始化失败");
+            return;
+        }
+    }
+
+    detectEnabled = !detectEnabled;
+    detectButton->setText(detectEnabled ? "停止检测" : "开始检测");
+    spdlog::info("检测功能: {}", detectEnabled ? "已启用" : "已禁用");
 }

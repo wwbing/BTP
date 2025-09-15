@@ -3,6 +3,7 @@
 #include <dirent.h>
 #include <math.h>
 #include <sys/time.h>
+#include <string.h>
 
 #include "im2d.h"
 #include "drmrga.h"
@@ -673,24 +674,30 @@ err:
 int convert_image(image_buffer_t* src_img, image_buffer_t* dst_img, image_rect_t* src_box, image_rect_t* dst_box, char color)
 {
     int ret;
-#if defined(DISABLE_RGA) 
+#if defined(DISABLE_RGA)
     printf("convert image use cpu\n");
     ret = convert_image_cpu(src_img, dst_img, src_box, dst_box, color);
 #else
-
-#if defined(RV1106_1103) 
-    if(src_img->width % 4 == 0 && dst_img->width % 4 == 0) {
+    // 检查环境变量，如果设置了 RGA_DISABLE 则跳过RGA处理
+    char *rga_disable = getenv("RGA_DISABLE");
+    if (rga_disable && strcmp(rga_disable, "1") == 0) {
+        printf("RGA disabled by environment variable, use cpu\n");
+        ret = convert_image_cpu(src_img, dst_img, src_box, dst_box, color);
+    } else {
+#if defined(RV1106_1103)
+        if(src_img->width % 4 == 0 && dst_img->width % 4 == 0) {
 #else
-    if(src_img->width % 16 == 0 && dst_img->width % 16 == 0) {
+        if(src_img->width % 16 == 0 && dst_img->width % 16 == 0) {
 #endif
-        ret = convert_image_rga(src_img, dst_img, src_box, dst_box, color);
-        if (ret != 0) {
-            printf("try convert image use cpu\n");
+            ret = convert_image_rga(src_img, dst_img, src_box, dst_box, color);
+            if (ret != 0) {
+                printf("try convert image use cpu\n");
+                ret = convert_image_cpu(src_img, dst_img, src_box, dst_box, color);
+            }
+        } else {
+            printf("src width is not 4/16-aligned, convert image use cpu\n");
             ret = convert_image_cpu(src_img, dst_img, src_box, dst_box, color);
         }
-    } else {
-        printf("src width is not 4/16-aligned, convert image use cpu\n");
-        ret = convert_image_cpu(src_img, dst_img, src_box, dst_box, color);
     }
 #endif
     return ret;

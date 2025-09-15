@@ -12,6 +12,10 @@
 #include <QByteArray>
 #include <linux/videodev2.h>
 #include <spdlog/spdlog.h>
+// RKNN相关头文件
+#include "rknn_api.h"
+#include "yolov6.h"
+#include "postprocess.h"
 
 class CameraWindow : public QMainWindow
 {
@@ -26,14 +30,18 @@ private:
     bool initCamera();
     void captureFrame();
     void closeCamera();
+    bool initRKNN();
+    bool runInference(const QImage &inputImage, QImage &outputImage);
 
 private slots:
     void onStartStopClicked();
+    void onDetectClicked();
     void onTimerTimeout();
 
 private:
     QLabel *cameraView;
     QPushButton *startStopButton;
+    QPushButton *detectButton;
     QPushButton *backButton;
     QTimer *captureTimer;
 
@@ -47,8 +55,13 @@ private:
     int width;
     int height;
     bool isRunning;
+    bool detectEnabled;
 
     const char* devicePath;
+
+    // RKNN相关
+    rknn_app_context_t* rknn_app_ctx;
+    bool rknn_initialized;
 };
 
 #endif // CAMERAWINDOW_H

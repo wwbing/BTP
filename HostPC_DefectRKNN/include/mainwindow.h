@@ -86,6 +86,7 @@ private:
     QStackedLayout *stackedLayout;
     QLabel *inferenceResultLabel;
     QTableWidget *defectInfoTable;
+    QLabel *logoLabel;
 
     // 摄像头窗口
     CameraWindow *cameraWindow;

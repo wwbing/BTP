@@ -157,6 +157,28 @@ void MainWindow::setupUI()
     inferenceButton->setFixedWidth(120);
     openCameraButton->setFixedWidth(120);
 
+    // 创建logo组件
+    logoLabel = new QLabel(this);
+    logoLabel->setAlignment(Qt::AlignCenter);
+    logoLabel->setMinimumSize(120, 80);
+    logoLabel->setMaximumSize(120, 80);
+    logoLabel->setScaledContents(false); // 禁用自动缩放，保持宽高比
+
+    // 加载logo图片
+    QString logoPath = QCoreApplication::applicationDirPath() + "/../resources/logo.png";
+    QPixmap logoPixmap(logoPath);
+    if (logoPixmap.isNull()) {
+        // 如果无法加载图片，显示文字
+        logoLabel->setText("Company\nLogo");
+        logoLabel->setStyleSheet("background-color: #f0f0f0; border: 1px solid #ccc; border-radius: 5px; padding: 10px; font-weight: bold; color: #666;");
+    } else {
+        // 等比缩放图片以适应标签大小，保持宽高比
+        QPixmap scaledPixmap = logoPixmap.scaled(logoLabel->size(),
+                                              Qt::KeepAspectRatio,
+                                              Qt::SmoothTransformation);
+        logoLabel->setPixmap(scaledPixmap);
+    }
+
     // 创建功能分组
     QWidget *imageGroup = createButtonGroup({openButton, detectButton});
     QWidget *folderGroup = createButtonGroup({openFolderButton, batchDetectButton, prevImageButton, nextImageButton});
@@ -164,6 +186,8 @@ void MainWindow::setupUI()
     QWidget *cameraGroup = createButtonGroup({openCameraButton});
 
     // 添加分组到左侧布局，使用弹簧填充分组之间的空间
+    leftLayout->addWidget(logoLabel); // logo放在最顶部
+    leftLayout->addStretch(1);
     leftLayout->addWidget(imageGroup);
     leftLayout->addStretch(1);
     leftLayout->addWidget(folderGroup);

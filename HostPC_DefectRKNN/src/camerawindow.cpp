@@ -52,11 +52,14 @@ CameraWindow::~CameraWindow()
     if (rknn_app_ctx) {
         if (rknn_app_ctx->input_attrs) {
             free(rknn_app_ctx->input_attrs);
+            rknn_app_ctx->input_attrs = nullptr;
         }
         if (rknn_app_ctx->output_attrs) {
             free(rknn_app_ctx->output_attrs);
+            rknn_app_ctx->output_attrs = nullptr;
         }
         release_yolov6_model(rknn_app_ctx);
+        deinit_post_process(); // 确保清理后处理模块
         free(rknn_app_ctx);
         rknn_app_ctx = nullptr;
     }
@@ -342,6 +345,12 @@ void CameraWindow::onTimerTimeout()
 bool CameraWindow::initRKNN()
 {
     spdlog::info("开始初始化RKNN模型");
+
+    // 避免重复初始化
+    if (rknn_initialized || rknn_app_ctx) {
+        spdlog::warn("RKNN模型已经初始化，跳过初始化");
+        return true;
+    }
 
     // 分配RKNN应用上下文
     rknn_app_ctx = (rknn_app_context_t*)malloc(sizeof(rknn_app_context_t));

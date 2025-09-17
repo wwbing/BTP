@@ -101,7 +101,8 @@ MainWindow::~MainWindow()
 
     // 清理摄像头窗口
     if (cameraWindow) {
-        delete cameraWindow;
+        cameraWindow->close();
+        cameraWindow = nullptr;
     }
 
     // 关闭日志
@@ -192,12 +193,14 @@ void MainWindow::setupUI()
     defectInfoTable = new QTableWidget(this);
     defectInfoTable->setColumnCount(4);
     defectInfoTable->setHorizontalHeaderLabels(QStringList() << "缺陷类型" << "置信度" << "位置" << "尺寸");
-    defectInfoTable->horizontalHeader()->setStretchLastSection(true);
+    defectInfoTable->horizontalHeader()->setStretchLastSection(false); // 禁用最后一列拉伸
+    defectInfoTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Fixed); // 使用固定列宽
     defectInfoTable->setAlternatingRowColors(true);
     defectInfoTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     defectInfoTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     defectInfoTable->setMaximumHeight(150);
     defectInfoTable->setVisible(false); // 初始时隐藏，有检测结果时显示
+    defectInfoTable->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed); // 水平扩展，垂直固定
 
     // 创建状态栏
     QHBoxLayout *statusLayout = new QHBoxLayout();
@@ -295,8 +298,14 @@ void MainWindow::loadImage(const QString &path)
     // 切换到图片显示
     stackedLayout->setCurrentWidget(imageLabel);
 
+    // 使用标签的最小尺寸进行缩放
+    QSize labelSize = imageLabel->minimumSize();
+    if (labelSize.isEmpty()) {
+        labelSize = QSize(640, 360); // 使用预设的最小尺寸
+    }
+
     // 缩放图片以适应标签
-    QPixmap scaledPixmap = pixmap.scaled(imageLabel->size(),
+    QPixmap scaledPixmap = pixmap.scaled(labelSize,
                                        Qt::KeepAspectRatio,
                                        Qt::SmoothTransformation);
     imageLabel->setPixmap(scaledPixmap);
@@ -424,8 +433,14 @@ void MainWindow::displayResult(const QImage &image)
     // 将QImage转换为QPixmap
     QPixmap pixmap = QPixmap::fromImage(image);
 
+    // 使用标签的最小尺寸进行缩放，而不是当前大小
+    QSize labelSize = imageLabel->minimumSize();
+    if (labelSize.isEmpty()) {
+        labelSize = QSize(640, 360); // 使用预设的最小尺寸
+    }
+
     // 缩放图片以适应标签
-    QPixmap scaledPixmap = pixmap.scaled(imageLabel->size(),
+    QPixmap scaledPixmap = pixmap.scaled(labelSize,
                                        Qt::KeepAspectRatio,
                                        Qt::SmoothTransformation);
     imageLabel->setPixmap(scaledPixmap);
@@ -466,13 +481,17 @@ void MainWindow::updateDefectInfoTable(const object_detect_result_list &od_resul
             sizeItem->setTextAlignment(Qt::AlignCenter);
             defectInfoTable->setItem(i, 3, sizeItem);
         }
+
+        // 设置列宽比例，确保表格填满宽度
+        int tableWidth = defectInfoTable->width();
+        defectInfoTable->setColumnWidth(0, tableWidth * 0.25);  // 缺陷类型 25%
+        defectInfoTable->setColumnWidth(1, tableWidth * 0.20);  // 置信度 20%
+        defectInfoTable->setColumnWidth(2, tableWidth * 0.25);  // 位置 25%
+        defectInfoTable->setColumnWidth(3, tableWidth * 0.30);  // 尺寸 30%
     } else {
         // 没有检测结果，隐藏表格
         defectInfoTable->setVisible(false);
     }
-
-    // 调整列宽以适应内容
-    defectInfoTable->resizeColumnsToContents();
 }
 
 void MainWindow::openFolder()
@@ -900,12 +919,21 @@ void MainWindow::openCamera()
     // 如果摄像头窗口已经存在，先关闭它
     if (cameraWindow) {
         cameraWindow->close();
-        delete cameraWindow;
         cameraWindow = nullptr;
     }
 
     // 创建新的摄像头窗口
     cameraWindow = new CameraWindow(this);
+
+    // 设置窗口属性，确保关闭时自动删除
+    cameraWindow->setAttribute(Qt::WA_DeleteOnClose);
+
+    // 连接destroy信号，在窗口销毁时将指针设为nullptr
+    connect(cameraWindow, &QObject::destroyed, this, [this]() {
+        cameraWindow = nullptr;
+        spdlog::info("摄像头窗口已销毁");
+    });
+
     cameraWindow->show();
 
     spdlog::info("摄像头窗口已打开");

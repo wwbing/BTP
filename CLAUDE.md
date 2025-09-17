@@ -197,6 +197,32 @@ YOLOv6 模型有 9 个输出张量：
 - 3 个尺度的检测输出 (80x80, 40x40, 20x20)
 - 每个尺度包括：边界框 (4 通道)、类别分数 (N 个类别) 和物体性 (1 通道)
 
+## 缺陷检测配置
+
+### 当前模型信息
+- **模型文件**: `neu-det-new.rknn` (YOLOv6 架构)
+- **输入尺寸**: 640x640 RGB 图像
+- **缺陷类别**: 6个类别 (cr, ic, ps, rs, sc, pc)
+- **置信度阈值**: 0.5 (BOX_THRESH)
+- **NMS阈值**: 0.45 (NMS_THRESH)
+
+### 类别说明
+- **cr**: 裂纹 (Crack)
+- **ic**: 夹杂 (Inclusion)
+- **ps**: 压痕 (Pressure Mark)
+- **rs**: 划痕 (Scratch)
+- **sc**: 疤痕 (Scar)
+- **pc**: 坑点 (Pit)
+
+### 检测参数
+```cpp
+// 后处理参数 (rknn_infer/include/postprocess.h)
+#define OBJ_CLASS_NUM 6              // 缺陷类别数量
+#define NMS_THRESH 0.45              // NMS阈值
+#define BOX_THRESH 0.5               // 置信度阈值
+#define OBJ_NUMB_MAX_SIZE 128        // 最大检测目标数
+```
+
 ## 环境设置
 
 ### 构建依赖项

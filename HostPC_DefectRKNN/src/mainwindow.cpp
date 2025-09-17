@@ -133,6 +133,7 @@ void MainWindow::setupUI()
     detectButton = new QPushButton("开始检测");
     openFolderButton = new QPushButton("选择文件夹");
     batchDetectButton = new QPushButton("批量检测");
+    showStatsButton = new QPushButton("查看统计");
     prevImageButton = new QPushButton("上一张");
     nextImageButton = new QPushButton("下一张");
     openVideoButton = new QPushButton("打开视频");
@@ -142,6 +143,7 @@ void MainWindow::setupUI()
     // 设置按钮初始状态
     detectButton->setEnabled(false);
     batchDetectButton->setEnabled(false);
+    showStatsButton->setEnabled(false);
     inferenceButton->setEnabled(false);
     prevImageButton->setEnabled(false);
     nextImageButton->setEnabled(false);
@@ -151,6 +153,7 @@ void MainWindow::setupUI()
     detectButton->setFixedWidth(120);
     openFolderButton->setFixedWidth(120);
     batchDetectButton->setFixedWidth(120);
+    showStatsButton->setFixedWidth(120);
     prevImageButton->setFixedWidth(120);
     nextImageButton->setFixedWidth(120);
     openVideoButton->setFixedWidth(120);
@@ -181,7 +184,7 @@ void MainWindow::setupUI()
 
     // 创建功能分组
     QWidget *imageGroup = createButtonGroup({openButton, detectButton});
-    QWidget *folderGroup = createButtonGroup({openFolderButton, batchDetectButton, prevImageButton, nextImageButton});
+    QWidget *folderGroup = createButtonGroup({openFolderButton, batchDetectButton, showStatsButton, prevImageButton, nextImageButton});
     QWidget *videoGroup = createButtonGroup({openVideoButton, inferenceButton});
     QWidget *cameraGroup = createButtonGroup({openCameraButton});
 
@@ -260,6 +263,7 @@ void MainWindow::setupUI()
     connect(detectButton, &QPushButton::clicked, this, &MainWindow::detectDefects);
     connect(openFolderButton, &QPushButton::clicked, this, &MainWindow::openFolder);
     connect(batchDetectButton, &QPushButton::clicked, this, &MainWindow::batchDetect);
+    connect(showStatsButton, &QPushButton::clicked, this, &MainWindow::showStatistics);
     connect(prevImageButton, &QPushButton::clicked, this, &MainWindow::showPreviousImage);
     connect(nextImageButton, &QPushButton::clicked, this, &MainWindow::showNextImage);
     connect(openVideoButton, &QPushButton::clicked, this, &MainWindow::openVideo);
@@ -626,6 +630,11 @@ void MainWindow::processFolder(const QString &folderPath)
         return;
     }
 
+    // 清空统计数据，开始新的统计
+    batchStats.clear();
+    spdlog::info("开始批量检测统计，文件夹: {}", folderPath.toStdString());
+
+    
     // 创建进度对话框
     QProgressDialog progressDialog("正在批量处理图片...", "取消", 0, imageFiles.size(), this);
     progressDialog.setWindowModality(Qt::WindowModal);
@@ -675,6 +684,9 @@ void MainWindow::processFolder(const QString &folderPath)
         object_detect_result_list od_results;
 
         if (runRKNNInference(inputImage, outputImage, &od_results)) {
+            // 收集统计数据
+            collectStatistics(od_results, imagePath);
+
             // 更新缺陷信息表格（显示当前处理的图片结果）
             updateDefectInfoTable(od_results);
 
@@ -701,11 +713,36 @@ void MainWindow::processFolder(const QString &folderPath)
 
     progressDialog.setValue(imageFiles.size());
 
+    // 启用统计按钮
+    showStatsButton->setEnabled(true);
+
     // 显示最终结果
     QString summary = QString(" 批量检测完成！成功: %1, 失败: %2").arg(successCount).arg(failCount);
     statusLabel->setText(summary);
 
-    QMessageBox::information(this, "批量检测完成", summary + QString("\n结果已保存到: %1").arg(outputDir));
+    // 添加统计信息到汇总
+    int totalDefects = 0;
+    for (int count : batchStats.defectCounts) {
+        totalDefects += count;
+    }
+
+    QString statsSummary = QString("\n\n统计汇总:\n"
+                                 "总图片数: %1\n"
+                                 "有缺陷图片: %2\n"
+                                 "检测到缺陷总数: %3\n"
+                                 "缺陷类型数: %4")
+                                .arg(batchStats.totalImages)
+                                .arg(batchStats.imagesWithDefects)
+                                .arg(totalDefects)
+                                .arg(batchStats.defectCounts.size());
+
+    QMessageBox::StandardButton reply = QMessageBox::question(this, "批量检测完成",
+        summary + QString("\n结果已保存到: %1").arg(outputDir) + statsSummary + "\n\n是否查看详细统计信息?",
+        QMessageBox::Yes|QMessageBox::No);
+
+    if (reply == QMessageBox::Yes) {
+        showStatistics();
+    }
 }
 
 bool MainWindow::saveResultImage(const QImage &image, const QString &outputPath)
@@ -1026,4 +1063,106 @@ void MainWindow::showNextImage()
 
     currentImageIndex++;
     loadImage(currentImageList[currentImageIndex]);
+}
+
+void MainWindow::collectStatistics(const object_detect_result_list &od_results, const QString &imagePath)
+{
+    // 增加总图片数
+    batchStats.totalImages++;
+
+    // 如果有检测结果，增加有缺陷的图片数
+    if (od_results.count > 0) {
+        batchStats.imagesWithDefects++;
+    }
+
+    // 统计每种缺陷的数量和置信度
+    for (int i = 0; i < od_results.count; i++) {
+        const object_detect_result *result = &od_results.results[i];
+        QString defectType = coco_cls_to_name(result->cls_id);
+
+        // 跳过无效的类别名称
+        if (defectType.isEmpty() || defectType == "null") {
+            continue;
+        }
+
+        // 统计缺陷数量
+        batchStats.defectCounts[defectType]++;
+
+        // 记录置信度
+        batchStats.defectConfidences[defectType].append(result->prop);
+
+        // 统计包含该缺陷类型的图片数（每张图片只统计一次）
+        if (!batchStats.defectImageCounts.contains(defectType)) {
+            batchStats.defectImageCounts[defectType] = 0;
+        }
+        // 在每张图片中，对于每种缺陷类型，只增加一次
+        batchStats.defectImageCounts[defectType]++;
+    }
+
+    spdlog::debug("收集统计数据 - 图片: {}, 缺陷数: {}, 累计缺陷类型: {}",
+                  QFileInfo(imagePath).fileName().toStdString(),
+                  od_results.count,
+                  batchStats.defectCounts.size());
+}
+
+void MainWindow::showStatistics()
+{
+    if (batchStats.totalImages == 0) {
+        QMessageBox::information(this, "统计信息", "暂无统计数据，请先进行批量检测。");
+        return;
+    }
+
+    
+    // 创建统计对话框
+    StatisticsDialog::DefectStatistics stats;
+    stats.totalImages = batchStats.totalImages;
+    stats.imagesWithDefects = batchStats.imagesWithDefects;
+    stats.defectCounts = batchStats.defectCounts;
+    stats.defectConfidences = batchStats.defectConfidences;
+    stats.defectImageCounts = batchStats.defectImageCounts;
+
+    StatisticsDialog dialog(stats, this);
+    dialog.exec();
+}
+
+QMap<QString, QPair<int, int>> MainWindow::calculateConfidenceDistribution(const QString &defectType) const
+{
+    QMap<QString, QPair<int, int>> distribution;
+
+    QVector<float> confidences = batchStats.defectConfidences.value(defectType);
+    if (confidences.isEmpty()) {
+        return distribution;
+    }
+
+    // 定义置信度区间
+    distribution["0.0-0.5"] = qMakePair(0, 0);
+    distribution["0.5-0.6"] = qMakePair(0, 0);
+    distribution["0.6-0.7"] = qMakePair(0, 0);
+    distribution["0.7-0.8"] = qMakePair(0, 0);
+    distribution["0.8-0.9"] = qMakePair(0, 0);
+    distribution["0.9-1.0"] = qMakePair(0, 0);
+
+    for (float confidence : confidences) {
+        if (confidence < 0.5) {
+            distribution["0.0-0.5"].first++;
+            distribution["0.0-0.5"].second++;
+        } else if (confidence < 0.6) {
+            distribution["0.5-0.6"].first++;
+            distribution["0.5-0.6"].second++;
+        } else if (confidence < 0.7) {
+            distribution["0.6-0.7"].first++;
+            distribution["0.6-0.7"].second++;
+        } else if (confidence < 0.8) {
+            distribution["0.7-0.8"].first++;
+            distribution["0.7-0.8"].second++;
+        } else if (confidence < 0.9) {
+            distribution["0.8-0.9"].first++;
+            distribution["0.8-0.9"].second++;
+        } else {
+            distribution["0.9-1.0"].first++;
+            distribution["0.9-1.0"].second++;
+        }
+    }
+
+    return distribution;
 }

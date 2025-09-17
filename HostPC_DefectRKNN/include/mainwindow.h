@@ -26,10 +26,14 @@
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QHeaderView>
+#include <QMap>
+#include <QVector>
+#include <QPair>
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include "camerawindow.h"
+#include "statisticsdialog.h"
 // RKNN相关头文件将在cpp文件中包含
 
 class MainWindow : public QMainWindow
@@ -121,6 +125,32 @@ private:
     QMutex inferenceMutex;
     QQueue<QVideoFrame> frameQueue;
     QWaitCondition frameCondition;
+
+    // 统计数据结构
+    struct DefectStatistics {
+        int totalImages;                    // 总图片数
+        int imagesWithDefects;              // 有缺陷的图片数
+        QMap<QString, int> defectCounts;   // 各缺陷类型数量
+        QMap<QString, QVector<float>> defectConfidences; // 各缺陷类型的置信度列表
+        QMap<QString, int> defectImageCounts; // 包含各缺陷类型的图片数
+
+        DefectStatistics() : totalImages(0), imagesWithDefects(0) {}
+
+        void clear() {
+            totalImages = 0;
+            imagesWithDefects = 0;
+            defectCounts.clear();
+            defectConfidences.clear();
+            defectImageCounts.clear();
+        }
+    };
+
+    DefectStatistics batchStats;  // 批量检测统计数据
+    QPushButton *showStatsButton;   // 显示统计按钮
+
+    void collectStatistics(const object_detect_result_list &od_results, const QString &imagePath);
+    void showStatistics();
+    QMap<QString, QPair<int, int>> calculateConfidenceDistribution(const QString &defectType) const;
 
     };
 

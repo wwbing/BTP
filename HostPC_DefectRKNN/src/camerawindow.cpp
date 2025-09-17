@@ -72,30 +72,55 @@ void CameraWindow::setupUI()
     QWidget *centralWidget = new QWidget(this);
     setCentralWidget(centralWidget);
 
-    QVBoxLayout *mainLayout = new QVBoxLayout(centralWidget);
+    // 创建主布局 (水平布局，左侧按钮，右侧显示)
+    QHBoxLayout *mainLayout = new QHBoxLayout(centralWidget);
+    mainLayout->setSpacing(10);
+    mainLayout->setContentsMargins(10, 10, 10, 10);
 
-    // 摄像头预览区域
-    cameraView = new QLabel(this);
-    cameraView->setStyleSheet("background-color: black;");
-    cameraView->setMinimumHeight(480);
-    cameraView->setAlignment(Qt::AlignCenter);
-    cameraView->setText("摄像头预览区域");
-    cameraView->setStyleSheet("color: white; background-color: black;");
-    mainLayout->addWidget(cameraView);
+    // 创建左侧按钮区域
+    QWidget *leftWidget = new QWidget();
+    QVBoxLayout *leftLayout = new QVBoxLayout(leftWidget);
+    leftLayout->setSpacing(10);
+    leftLayout->setContentsMargins(0, 0, 0, 0);
 
-    // 控制按钮
-    QWidget *buttonWidget = new QWidget();
-    QHBoxLayout *buttonLayout = new QHBoxLayout(buttonWidget);
-
+    // 创建按钮
     startStopButton = new QPushButton("开始预览", this);
     detectButton = new QPushButton("开始检测", this);
     backButton = new QPushButton("返回", this);
 
-    buttonLayout->addWidget(startStopButton);
-    buttonLayout->addWidget(detectButton);
-    buttonLayout->addWidget(backButton);
+    // 设置按钮固定大小，使其更整齐
+    startStopButton->setFixedWidth(120);
+    detectButton->setFixedWidth(120);
+    backButton->setFixedWidth(120);
 
-    mainLayout->addWidget(buttonWidget);
+    // 添加按钮到左侧布局
+    leftLayout->addWidget(startStopButton);
+    leftLayout->addWidget(detectButton);
+    leftLayout->addWidget(backButton);
+
+    // 添加弹簧，使按钮靠上
+    leftLayout->addStretch();
+
+    // 创建右侧显示区域
+    QWidget *rightWidget = new QWidget();
+    QVBoxLayout *rightLayout = new QVBoxLayout(rightWidget);
+    rightLayout->setSpacing(10);
+    rightLayout->setContentsMargins(0, 0, 0, 0);
+
+    // 摄像头预览区域
+    cameraView = new QLabel(this);
+    cameraView->setStyleSheet("background-color: black;");
+    cameraView->setMinimumSize(640, 480);
+    cameraView->setAlignment(Qt::AlignCenter);
+    cameraView->setText("摄像头预览区域");
+    cameraView->setStyleSheet("color: white; background-color: black;");
+
+    // 添加摄像头预览到右侧布局
+    rightLayout->addWidget(cameraView, 1);
+
+    // 设置左右区域的比例
+    mainLayout->addWidget(leftWidget, 1);    // 左侧占1份
+    mainLayout->addWidget(rightWidget, 4);  // 右侧占4份
 
     // 连接信号槽
     connect(startStopButton, &QPushButton::clicked, this, &CameraWindow::onStartStopClicked);

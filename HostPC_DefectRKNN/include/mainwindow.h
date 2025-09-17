@@ -22,6 +22,10 @@
 #include <QWaitCondition>
 #include <QVideoFrame>
 #include <QMediaMetaData>
+#include <QTextEdit>
+#include <QTableWidget>
+#include <QTableWidgetItem>
+#include <QHeaderView>
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
@@ -51,7 +55,7 @@ private:
     void setupUI();
     void initializeRKNN();
     void loadImage(const QString &path);
-    bool runRKNNInference(const QImage &inputImage, QImage &outputImage);
+    bool runRKNNInference(const QImage &inputImage, QImage &outputImage, object_detect_result_list *od_results = nullptr);
     void displayResult(const QImage &image);
     void processFolder(const QString &folderPath);
     QStringList findImageFiles(const QString &folderPath);
@@ -60,6 +64,7 @@ private:
     void initVideoInference();
     void startVideoInference();
     void stopVideoInference();
+    void updateDefectInfoTable(const object_detect_result_list &od_results);
 
     // UI组件
     QPushButton *openButton;
@@ -75,6 +80,7 @@ private:
     QTimer *videoTimer;
     QStackedLayout *stackedLayout;
     QLabel *inferenceResultLabel;
+    QTableWidget *defectInfoTable;
 
     // 摄像头窗口
     CameraWindow *cameraWindow;

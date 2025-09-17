@@ -116,14 +116,16 @@ void MainWindow::setupUI()
     setCentralWidget(centralWidget);
     setMinimumSize(800, 600);
 
-    // 创建主布局
-    QVBoxLayout *mainLayout = new QVBoxLayout(centralWidget);
+    // 创建主布局 (水平布局，左侧按钮，右侧显示)
+    QHBoxLayout *mainLayout = new QHBoxLayout(centralWidget);
     mainLayout->setSpacing(10);
     mainLayout->setContentsMargins(10, 10, 10, 10);
 
-    // 创建按钮布局
-    QHBoxLayout *buttonLayout1 = new QHBoxLayout();
-    QHBoxLayout *buttonLayout2 = new QHBoxLayout();
+    // 创建左侧按钮区域
+    QWidget *leftWidget = new QWidget();
+    QVBoxLayout *leftLayout = new QVBoxLayout(leftWidget);
+    leftLayout->setSpacing(10);
+    leftLayout->setContentsMargins(0, 0, 0, 0);
 
     // 创建按钮
     openButton = new QPushButton("打开图片");
@@ -139,17 +141,32 @@ void MainWindow::setupUI()
     batchDetectButton->setEnabled(false);
     inferenceButton->setEnabled(false);
 
-    // 添加按钮到布局
-    buttonLayout1->addWidget(openButton);
-    buttonLayout1->addWidget(detectButton);
-    buttonLayout1->addWidget(openFolderButton);
-    buttonLayout1->addWidget(batchDetectButton);
-    buttonLayout2->addWidget(openVideoButton);
-    buttonLayout2->addWidget(openCameraButton);
-    buttonLayout2->addWidget(inferenceButton);
+    // 设置按钮固定大小，使其更整齐
+    openButton->setFixedWidth(120);
+    detectButton->setFixedWidth(120);
+    openFolderButton->setFixedWidth(120);
+    batchDetectButton->setFixedWidth(120);
+    openVideoButton->setFixedWidth(120);
+    openCameraButton->setFixedWidth(120);
+    inferenceButton->setFixedWidth(120);
 
-    buttonLayout1->setSpacing(10);
-    buttonLayout2->setSpacing(10);
+    // 添加按钮到左侧布局
+    leftLayout->addWidget(openButton);
+    leftLayout->addWidget(detectButton);
+    leftLayout->addWidget(openFolderButton);
+    leftLayout->addWidget(batchDetectButton);
+    leftLayout->addWidget(openVideoButton);
+    leftLayout->addWidget(openCameraButton);
+    leftLayout->addWidget(inferenceButton);
+
+    // 添加弹簧，使按钮靠上
+    leftLayout->addStretch();
+
+    // 创建右侧显示区域
+    QWidget *rightWidget = new QWidget();
+    QVBoxLayout *rightLayout = new QVBoxLayout(rightWidget);
+    rightLayout->setSpacing(10);
+    rightLayout->setContentsMargins(0, 0, 0, 0);
 
     // 创建堆叠布局，用于在图片和视频之间切换
     stackedLayout = new QStackedLayout();
@@ -157,19 +174,30 @@ void MainWindow::setupUI()
     // 创建图片显示标签
     imageLabel = new QLabel(this);
     imageLabel->setAlignment(Qt::AlignCenter);
-    imageLabel->setMinimumSize(640, 480);
+    imageLabel->setMinimumSize(640, 360);
     imageLabel->setText("请选择图片文件");
     imageLabel->setFrameStyle(QFrame::Box | QFrame::Sunken);
 
     // 创建推理结果显示标签
     inferenceResultLabel = new QLabel(this);
     inferenceResultLabel->setAlignment(Qt::AlignCenter);
-    inferenceResultLabel->setMinimumSize(640, 480);
+    inferenceResultLabel->setMinimumSize(640, 360);
     inferenceResultLabel->setText("推理结果将在这里显示");
     inferenceResultLabel->setFrameStyle(QFrame::Box | QFrame::Sunken);
 
     stackedLayout->addWidget(imageLabel);
     stackedLayout->addWidget(inferenceResultLabel);
+
+    // 创建缺陷信息显示表格
+    defectInfoTable = new QTableWidget(this);
+    defectInfoTable->setColumnCount(4);
+    defectInfoTable->setHorizontalHeaderLabels(QStringList() << "缺陷类型" << "置信度" << "位置" << "尺寸");
+    defectInfoTable->horizontalHeader()->setStretchLastSection(true);
+    defectInfoTable->setAlternatingRowColors(true);
+    defectInfoTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    defectInfoTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    defectInfoTable->setMaximumHeight(150);
+    defectInfoTable->setVisible(false); // 初始时隐藏，有检测结果时显示
 
     // 创建状态栏
     QHBoxLayout *statusLayout = new QHBoxLayout();
@@ -181,11 +209,14 @@ void MainWindow::setupUI()
     statusLayout->addWidget(inferenceStatusLabel);
     statusLayout->addWidget(versionLabel);
 
-    // 添加所有组件到主布局
-    mainLayout->addLayout(buttonLayout1);
-    mainLayout->addLayout(buttonLayout2);
-    mainLayout->addLayout(stackedLayout, 1);
-    mainLayout->addLayout(statusLayout);
+    // 添加组件到右侧布局
+    rightLayout->addLayout(stackedLayout, 1);
+    rightLayout->addWidget(defectInfoTable);
+    rightLayout->addLayout(statusLayout);
+
+    // 设置左右区域的比例
+    mainLayout->addWidget(leftWidget, 1);    // 左侧占1份
+    mainLayout->addWidget(rightWidget, 4);  // 右侧占4份
 
     // 连接信号槽
     connect(openButton, &QPushButton::clicked, this, &MainWindow::openImage);
@@ -271,6 +302,10 @@ void MainWindow::loadImage(const QString &path)
     imageLabel->setPixmap(scaledPixmap);
     detectButton->setEnabled(true);
     statusLabel->setText(QString(" 已加载: %1").arg(QFileInfo(path).fileName()));
+
+    // 清空缺陷信息表格
+    defectInfoTable->setVisible(false);
+    defectInfoTable->setRowCount(0);
 }
 
 void MainWindow::detectDefects()
@@ -293,8 +328,10 @@ void MainWindow::detectDefects()
 
     // 运行RKNN推理
     QImage outputImage;
-    if (runRKNNInference(inputImage, outputImage)) {
+    object_detect_result_list od_results;
+    if (runRKNNInference(inputImage, outputImage, &od_results)) {
         displayResult(outputImage);
+        updateDefectInfoTable(od_results);
         statusLabel->setText("检测完成");
     } else {
         QMessageBox::warning(this, "错误", "RKNN推理失败");
@@ -302,7 +339,7 @@ void MainWindow::detectDefects()
     }
 }
 
-bool MainWindow::runRKNNInference(const QImage &inputImage, QImage &outputImage)
+bool MainWindow::runRKNNInference(const QImage &inputImage, QImage &outputImage, object_detect_result_list *od_results)
 {
     if (!rknn_initialized) {
         return false;
@@ -329,8 +366,10 @@ bool MainWindow::runRKNNInference(const QImage &inputImage, QImage &outputImage)
     memcpy(src_image.virt_addr, rgbImage.constBits(), src_image.size);
 
     // 运行RKNN推理
-    object_detect_result_list od_results;
-    int ret = inference_yolov6_model((rknn_app_context_t*)rknn_app_ctx, &src_image, &od_results);
+    object_detect_result_list local_od_results;
+    object_detect_result_list *results_ptr = od_results ? od_results : &local_od_results;
+
+    int ret = inference_yolov6_model((rknn_app_context_t*)rknn_app_ctx, &src_image, results_ptr);
     if (ret != 0) {
         spdlog::error("RKNN推理失败，返回码: {}", ret);
         // 释放图像内存
@@ -340,18 +379,18 @@ bool MainWindow::runRKNNInference(const QImage &inputImage, QImage &outputImage)
         return false;
     }
 
-    spdlog::info("RKNN推理成功，检测到{}个目标", od_results.count);
-    
+    spdlog::info("RKNN推理成功，检测到{}个目标", results_ptr->count);
+
     // 复制原图用于绘制结果
     outputImage = inputImage.copy();
-    
+
     // 使用QPainter绘制检测结果
     QPainter painter(&outputImage);
     painter.setFont(QFont("Arial", 10));
-    
+
     // 绘制检测框和标签
-    for (int i = 0; i < od_results.count; i++) {
-        object_detect_result *det_result = &(od_results.results[i]);
+    for (int i = 0; i < results_ptr->count; i++) {
+        object_detect_result *det_result = &(results_ptr->results[i]);
 
         // 计算相对于原图的坐标
         int x1 = det_result->box.left;
@@ -369,14 +408,14 @@ bool MainWindow::runRKNNInference(const QImage &inputImage, QImage &outputImage)
         // 使用颜色管理器绘制带颜色的检测框
         DefectColorManager::drawDefectBox(painter, det_result->cls_id, rect, det_result->prop, coco_cls_to_name(det_result->cls_id));
     }
-    
+
     painter.end();
-    
+
     // 释放图像内存
     if (src_image.virt_addr != NULL) {
         free(src_image.virt_addr);
     }
-    
+
     return true;
 }
 
@@ -390,6 +429,50 @@ void MainWindow::displayResult(const QImage &image)
                                        Qt::KeepAspectRatio,
                                        Qt::SmoothTransformation);
     imageLabel->setPixmap(scaledPixmap);
+}
+
+void MainWindow::updateDefectInfoTable(const object_detect_result_list &od_results)
+{
+    // 清空表格
+    defectInfoTable->setRowCount(0);
+
+    // 如果有检测结果，显示表格并填充数据
+    if (od_results.count > 0) {
+        defectInfoTable->setVisible(true);
+        defectInfoTable->setRowCount(od_results.count);
+
+        for (int i = 0; i < od_results.count; i++) {
+            const object_detect_result *result = &od_results.results[i];
+
+            // 缺陷类型
+            QTableWidgetItem *typeItem = new QTableWidgetItem(coco_cls_to_name(result->cls_id));
+            typeItem->setTextAlignment(Qt::AlignCenter);
+            defectInfoTable->setItem(i, 0, typeItem);
+
+            // 置信度
+            QTableWidgetItem *confItem = new QTableWidgetItem(QString::number(result->prop, 'f', 3));
+            confItem->setTextAlignment(Qt::AlignCenter);
+            defectInfoTable->setItem(i, 1, confItem);
+
+            // 位置 (x, y)
+            QString position = QString("(%1, %2)").arg(result->box.left).arg(result->box.top);
+            QTableWidgetItem *posItem = new QTableWidgetItem(position);
+            posItem->setTextAlignment(Qt::AlignCenter);
+            defectInfoTable->setItem(i, 2, posItem);
+
+            // 尺寸 (width x height)
+            QString size = QString("%1 x %2").arg(result->box.right - result->box.left).arg(result->box.bottom - result->box.top);
+            QTableWidgetItem *sizeItem = new QTableWidgetItem(size);
+            sizeItem->setTextAlignment(Qt::AlignCenter);
+            defectInfoTable->setItem(i, 3, sizeItem);
+        }
+    } else {
+        // 没有检测结果，隐藏表格
+        defectInfoTable->setVisible(false);
+    }
+
+    // 调整列宽以适应内容
+    defectInfoTable->resizeColumnsToContents();
 }
 
 void MainWindow::openFolder()
@@ -501,8 +584,12 @@ void MainWindow::processFolder(const QString &folderPath)
 
         currentImagePath = imagePath; // 设置当前图片路径
         QImage outputImage;
+        object_detect_result_list od_results;
 
-        if (runRKNNInference(inputImage, outputImage)) {
+        if (runRKNNInference(inputImage, outputImage, &od_results)) {
+            // 更新缺陷信息表格（显示当前处理的图片结果）
+            updateDefectInfoTable(od_results);
+
             // 保存结果图片
             QString resultPath = outputDir + "/" + fileInfo.completeBaseName() + "_result.jpg";
             if (saveResultImage(outputImage, resultPath)) {
@@ -698,9 +785,13 @@ void MainWindow::processVideoFrame(const QVideoFrame &frame)
 
     // 执行RKNN推理
     QImage resultImage;
-    if (runRKNNInference(image, resultImage)) {
+    object_detect_result_list od_results;
+    if (runRKNNInference(image, resultImage, &od_results)) {
         // 显示推理结果
         displayInferenceResult(resultImage);
+
+        // 更新缺陷信息表格
+        updateDefectInfoTable(od_results);
 
         // 更新统计信息
         inferenceFrameCount++;

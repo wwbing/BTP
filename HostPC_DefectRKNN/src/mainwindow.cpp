@@ -160,8 +160,8 @@ void MainWindow::setupUI()
     // 创建logo组件
     logoLabel = new QLabel(this);
     logoLabel->setAlignment(Qt::AlignCenter);
-    logoLabel->setMinimumSize(120, 80);
-    logoLabel->setMaximumSize(120, 80);
+    logoLabel->setMinimumSize(120, 120);
+    logoLabel->setMaximumSize(120, 120);
     logoLabel->setScaledContents(false); // 禁用自动缩放，保持宽高比
 
     // 加载logo图片

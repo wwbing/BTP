@@ -50,6 +50,9 @@ private slots:
     void toggleVideoInference();
     void processVideoFrame(const QVideoFrame &frame);
     void displayInferenceResult(const QImage &resultImage);
+    void showPreviousImage();
+    void showNextImage();
+    QWidget* createButtonGroup(const QList<QPushButton*> &buttons);
     
 private:
     void setupUI();
@@ -71,9 +74,11 @@ private:
     QPushButton *detectButton;
     QPushButton *openFolderButton;
     QPushButton *batchDetectButton;
+    QPushButton *prevImageButton;
+    QPushButton *nextImageButton;
     QPushButton *openVideoButton;
-    QPushButton *openCameraButton;
     QPushButton *inferenceButton;
+    QPushButton *openCameraButton;
     QLabel *imageLabel;
     QLabel *statusLabel;
     QLabel *inferenceStatusLabel;
@@ -91,6 +96,10 @@ private:
     QString currentFolderPath;
     // 当前视频路径
     QString currentVideoPath;
+    // 当前文件夹中的图片列表
+    QStringList currentImageList;
+    // 当前图片在列表中的索引
+    int currentImageIndex;
 
     // RKNN相关
     void* rknn_app_ctx;  // 使用void*指针避免头文件依赖

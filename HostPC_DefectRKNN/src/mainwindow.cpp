@@ -26,7 +26,7 @@
 #include <vector>
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), rknn_initialized(false), mediaPlayer(nullptr), videoProbe(nullptr), inferenceThread(nullptr), videoInferenceEnabled(false), isProcessingFrame(false), inferenceFrameCount(0), totalDetectionCount(0)
+    : QMainWindow(parent), rknn_initialized(false), mediaPlayer(nullptr), videoProbe(nullptr), inferenceThread(nullptr), videoInferenceEnabled(false), isProcessingFrame(false), inferenceFrameCount(0), totalDetectionCount(0), currentImageIndex(-1)
 {
     // 初始化spdlog日志
     try {
@@ -125,7 +125,7 @@ void MainWindow::setupUI()
     // 创建左侧按钮区域
     QWidget *leftWidget = new QWidget();
     QVBoxLayout *leftLayout = new QVBoxLayout(leftWidget);
-    leftLayout->setSpacing(10);
+    leftLayout->setSpacing(0);
     leftLayout->setContentsMargins(0, 0, 0, 0);
 
     // 创建按钮
@@ -133,35 +133,45 @@ void MainWindow::setupUI()
     detectButton = new QPushButton("开始检测");
     openFolderButton = new QPushButton("选择文件夹");
     batchDetectButton = new QPushButton("批量检测");
+    prevImageButton = new QPushButton("上一张");
+    nextImageButton = new QPushButton("下一张");
     openVideoButton = new QPushButton("打开视频");
-    openCameraButton = new QPushButton("打开摄像头");
     inferenceButton = new QPushButton("推理播放");
+    openCameraButton = new QPushButton("打开摄像头");
 
     // 设置按钮初始状态
     detectButton->setEnabled(false);
     batchDetectButton->setEnabled(false);
     inferenceButton->setEnabled(false);
+    prevImageButton->setEnabled(false);
+    nextImageButton->setEnabled(false);
 
     // 设置按钮固定大小，使其更整齐
     openButton->setFixedWidth(120);
     detectButton->setFixedWidth(120);
     openFolderButton->setFixedWidth(120);
     batchDetectButton->setFixedWidth(120);
+    prevImageButton->setFixedWidth(120);
+    nextImageButton->setFixedWidth(120);
     openVideoButton->setFixedWidth(120);
-    openCameraButton->setFixedWidth(120);
     inferenceButton->setFixedWidth(120);
+    openCameraButton->setFixedWidth(120);
 
-    // 添加按钮到左侧布局
-    leftLayout->addWidget(openButton);
-    leftLayout->addWidget(detectButton);
-    leftLayout->addWidget(openFolderButton);
-    leftLayout->addWidget(batchDetectButton);
-    leftLayout->addWidget(openVideoButton);
-    leftLayout->addWidget(openCameraButton);
-    leftLayout->addWidget(inferenceButton);
+    // 创建功能分组
+    QWidget *imageGroup = createButtonGroup({openButton, detectButton});
+    QWidget *folderGroup = createButtonGroup({openFolderButton, batchDetectButton, prevImageButton, nextImageButton});
+    QWidget *videoGroup = createButtonGroup({openVideoButton, inferenceButton});
+    QWidget *cameraGroup = createButtonGroup({openCameraButton});
 
-    // 添加弹簧，使按钮靠上
-    leftLayout->addStretch();
+    // 添加分组到左侧布局，使用弹簧填充分组之间的空间
+    leftLayout->addWidget(imageGroup);
+    leftLayout->addStretch(1);
+    leftLayout->addWidget(folderGroup);
+    leftLayout->addStretch(1);
+    leftLayout->addWidget(videoGroup);
+    leftLayout->addStretch(1);
+    leftLayout->addWidget(cameraGroup);
+    leftLayout->addStretch(2); // 底部弹簧，占更多空间
 
     // 创建右侧显示区域
     QWidget *rightWidget = new QWidget();
@@ -226,6 +236,8 @@ void MainWindow::setupUI()
     connect(detectButton, &QPushButton::clicked, this, &MainWindow::detectDefects);
     connect(openFolderButton, &QPushButton::clicked, this, &MainWindow::openFolder);
     connect(batchDetectButton, &QPushButton::clicked, this, &MainWindow::batchDetect);
+    connect(prevImageButton, &QPushButton::clicked, this, &MainWindow::showPreviousImage);
+    connect(nextImageButton, &QPushButton::clicked, this, &MainWindow::showNextImage);
     connect(openVideoButton, &QPushButton::clicked, this, &MainWindow::openVideo);
     connect(openCameraButton, &QPushButton::clicked, this, &MainWindow::openCamera);
     connect(inferenceButton, &QPushButton::clicked, this, &MainWindow::toggleVideoInference);
@@ -233,6 +245,21 @@ void MainWindow::setupUI()
     // 设置窗口属性
     setWindowTitle("RKNN 缺陷检测系统");
     resize(800, 600);
+}
+
+QWidget* MainWindow::createButtonGroup(const QList<QPushButton*> &buttons)
+{
+    QWidget *groupWidget = new QWidget();
+    QVBoxLayout *groupLayout = new QVBoxLayout(groupWidget);
+    groupLayout->setSpacing(8);
+    groupLayout->setContentsMargins(0, 0, 0, 0);
+
+    // 添加按钮
+    for (QPushButton *button : buttons) {
+        groupLayout->addWidget(button);
+    }
+
+    return groupWidget;
 }
 
 
@@ -281,6 +308,12 @@ void MainWindow::openImage()
         tr("图片文件 (*.png *.jpg *.jpeg *.bmp *.tiff);;所有文件 (*.*)"));
 
     if (!fileName.isEmpty()) {
+        // 清空图片列表和索引，因为这是单张图片模式
+        currentImageList.clear();
+        currentImageIndex = -1;
+        prevImageButton->setEnabled(false);
+        nextImageButton->setEnabled(false);
+
         loadImage(fileName);
     }
 }
@@ -310,7 +343,15 @@ void MainWindow::loadImage(const QString &path)
                                        Qt::SmoothTransformation);
     imageLabel->setPixmap(scaledPixmap);
     detectButton->setEnabled(true);
-    statusLabel->setText(QString(" 已加载: %1").arg(QFileInfo(path).fileName()));
+
+    // 更新状态栏显示
+    QString statusText;
+    if (!currentImageList.isEmpty()) {
+        statusText = QString(" 已加载: %1 (%2/%3)").arg(QFileInfo(path).fileName()).arg(currentImageIndex + 1).arg(currentImageList.size());
+    } else {
+        statusText = QString(" 已加载: %1").arg(QFileInfo(path).fileName());
+    }
+    statusLabel->setText(statusText);
 
     // 清空缺陷信息表格
     defectInfoTable->setVisible(false);
@@ -510,11 +551,15 @@ void MainWindow::openFolder()
 
         statusLabel->setText(QString(" 已选择文件夹: %1 (%2 张图片)").arg(QFileInfo(folderPath).fileName()).arg(imageFiles.size()));
         currentFolderPath = folderPath; // 保存文件夹路径
+        currentImageList = imageFiles;  // 保存图片列表
+        currentImageIndex = 0;          // 重置索引
 
-        // 可选：显示文件夹中的第一张图片作为预览
-        if (!imageFiles.isEmpty()) {
-            loadImage(imageFiles.first());
-        }
+        // 启用上一张/下一张按钮
+        prevImageButton->setEnabled(currentImageList.size() > 1);
+        nextImageButton->setEnabled(currentImageList.size() > 1);
+
+        // 显示文件夹中的第一张图片作为预览
+        loadImage(currentImageList.first());
     }
 }
 
@@ -937,4 +982,24 @@ void MainWindow::openCamera()
     cameraWindow->show();
 
     spdlog::info("摄像头窗口已打开");
+}
+
+void MainWindow::showPreviousImage()
+{
+    if (currentImageList.isEmpty() || currentImageIndex <= 0) {
+        return;
+    }
+
+    currentImageIndex--;
+    loadImage(currentImageList[currentImageIndex]);
+}
+
+void MainWindow::showNextImage()
+{
+    if (currentImageList.isEmpty() || currentImageIndex >= currentImageList.size() - 1) {
+        return;
+    }
+
+    currentImageIndex++;
+    loadImage(currentImageList[currentImageIndex]);
 }

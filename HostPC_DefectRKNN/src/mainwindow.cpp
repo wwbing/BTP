@@ -271,7 +271,7 @@ void MainWindow::setupUI()
     connect(inferenceButton, &QPushButton::clicked, this, &MainWindow::toggleVideoInference);
 
     // 设置窗口属性
-    setWindowTitle("RKNN 缺陷检测系统");
+    setWindowTitle("武汉纺织大学 通用 缺陷检测系统");
     resize(800, 600);
 }
 

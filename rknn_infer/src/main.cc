@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/time.h>
+#include <unistd.h>
 
 #include "file_utils.h"
 #include "image_drawing.h"
@@ -45,12 +47,21 @@ int main(int argc, char **argv)
 
     init_post_process();
 
+    printf("正在初始化RKNN模型...\n");
+    struct timeval model_init_start, model_init_end;
+    gettimeofday(&model_init_start, NULL);
+
     ret = init_yolov6_model(model_path, &rknn_app_ctx);
     if (ret != 0)
     {
         printf("init_yolov6_model fail! ret=%d model_path=%s\n", ret, model_path);
         goto out;
     }
+
+    gettimeofday(&model_init_end, NULL);
+    long model_init_time = (model_init_end.tv_sec - model_init_start.tv_sec) * 1000 +
+                          (model_init_end.tv_usec - model_init_start.tv_usec) / 1000;
+    printf("RKNN模型初始化完成，耗时: %ld ms\n", model_init_time);
 
     if (is_directory)
     {
@@ -74,6 +85,11 @@ int main(int argc, char **argv)
 
             image_buffer_t src_image;
             memset(&src_image, 0, sizeof(image_buffer_t));
+
+            // 读取图片时间统计
+            struct timeval read_start, read_end;
+            gettimeofday(&read_start, NULL);
+
             ret = read_image(image_files[i], &src_image);
 
             if (ret != 0)
@@ -82,9 +98,23 @@ int main(int argc, char **argv)
                 continue;
             }
 
+            gettimeofday(&read_end, NULL);
+            long read_time = (read_end.tv_sec - read_start.tv_sec) * 1000 +
+                            (read_end.tv_usec - read_start.tv_usec) / 1000;
+            printf("图片读取完成，耗时: %ld ms，图片尺寸: %dx%d\n", read_time, src_image.width, src_image.height);
+
             // 执行推理
             object_detect_result_list od_results;
+            struct timeval inference_start, inference_end;
+            gettimeofday(&inference_start, NULL);
+
             ret = inference_yolov6_model(&rknn_app_ctx, &src_image, &od_results);
+
+            gettimeofday(&inference_end, NULL);
+            long inference_time = (inference_end.tv_sec - inference_start.tv_sec) * 1000 +
+                                (inference_end.tv_usec - inference_start.tv_usec) / 1000;
+            printf("核心推理完成，耗时: %ld ms\n", inference_time);
+
             if (ret != 0)
             {
                 printf("推理失败! ret=%d\n", ret);
@@ -101,11 +131,12 @@ int main(int argc, char **argv)
             snprintf(output_path, sizeof(output_path), "out_%s", filename);
 
             // 画框和概率
+            printf("检测到 %d 个目标:\n", od_results.count);
             char text[256];
             for (int j = 0; j < od_results.count; j++)
             {
                 object_detect_result *det_result = &(od_results.results[j]);
-                printf("%s @ (%d %d %d %d) %.3f\n", coco_cls_to_name(det_result->cls_id),
+                printf("  - %s @ (%d %d %d %d) %.3f\n", coco_cls_to_name(det_result->cls_id),
                        det_result->box.left, det_result->box.top,
                        det_result->box.right, det_result->box.bottom,
                        det_result->prop);
@@ -121,14 +152,22 @@ int main(int argc, char **argv)
             }
 
             // 保存结果图片
+            struct timeval save_start, save_end;
+            gettimeofday(&save_start, NULL);
+
             ret = write_image(output_path, &src_image);
+
+            gettimeofday(&save_end, NULL);
+            long save_time = (save_end.tv_sec - save_start.tv_sec) * 1000 +
+                            (save_end.tv_usec - save_start.tv_usec) / 1000;
+
             if (ret != 0)
             {
                 printf("保存图片失败: %s\n", output_path);
             }
             else
             {
-                printf("结果已保存到: %s\n", output_path);
+                printf("结果已保存到: %s，耗时: %ld ms\n", output_path, save_time);
             }
 
             // 释放图片内存
@@ -136,6 +175,13 @@ int main(int argc, char **argv)
             {
                 free(src_image.virt_addr);
             }
+
+            // 计算单张图片总处理时间
+            struct timeval img_process_end;
+            gettimeofday(&img_process_end, NULL);
+            long img_process_time = (img_process_end.tv_sec - read_start.tv_sec) * 1000 +
+                                   (img_process_end.tv_usec - read_start.tv_usec) / 1000;
+            printf("单张图片总处理时间: %ld ms\n", img_process_time);
         }
 
         // 释放文件列表内存
@@ -145,6 +191,11 @@ int main(int argc, char **argv)
     else
     {
         // 单张图片处理
+        printf("开始处理单张图片: %s\n", input_path);
+
+        struct timeval read_start, read_end;
+        gettimeofday(&read_start, NULL);
+
         ret = read_image(input_path, &src_image);
 
         if (ret != 0)
@@ -153,9 +204,23 @@ int main(int argc, char **argv)
             goto out;
         }
 
+        gettimeofday(&read_end, NULL);
+        long read_time = (read_end.tv_sec - read_start.tv_sec) * 1000 +
+                        (read_end.tv_usec - read_start.tv_usec) / 1000;
+        printf("图片读取完成，耗时: %ld ms，图片尺寸: %dx%d\n", read_time, src_image.width, src_image.height);
+
         object_detect_result_list od_results;
 
+        struct timeval inference_start, inference_end;
+        gettimeofday(&inference_start, NULL);
+
         ret = inference_yolov6_model(&rknn_app_ctx, &src_image, &od_results);
+
+        gettimeofday(&inference_end, NULL);
+        long inference_time = (inference_end.tv_sec - inference_start.tv_sec) * 1000 +
+                            (inference_end.tv_usec - inference_start.tv_usec) / 1000;
+        printf("核心推理完成，耗时: %ld ms\n", inference_time);
+
         if (ret != 0)
         {
             printf("inference_yolov6_model fail! ret=%d\n", ret);
@@ -163,11 +228,12 @@ int main(int argc, char **argv)
         }
 
         // 画框和概率
+        printf("检测到 %d 个目标:\n", od_results.count);
         char text[256];
         for (int i = 0; i < od_results.count; i++)
         {
             object_detect_result *det_result = &(od_results.results[i]);
-            printf("%s @ (%d %d %d %d) %.3f\n", coco_cls_to_name(det_result->cls_id),
+            printf("  - %s @ (%d %d %d %d) %.3f\n", coco_cls_to_name(det_result->cls_id),
                    det_result->box.left, det_result->box.top,
                    det_result->box.right, det_result->box.bottom,
                    det_result->prop);
@@ -182,15 +248,30 @@ int main(int argc, char **argv)
             draw_text(&src_image, text, x1, y1 - 20, COLOR_RED, 10);
         }
 
+        struct timeval save_start, save_end;
+        gettimeofday(&save_start, NULL);
+
         ret = write_image("out.jpg", &src_image);
+
+        gettimeofday(&save_end, NULL);
+        long save_time = (save_end.tv_sec - save_start.tv_sec) * 1000 +
+                        (save_end.tv_usec - save_start.tv_usec) / 1000;
+
         if (ret != 0)
         {
             printf("保存图片失败: out.jpg\n");
         }
         else
         {
-            printf("结果已保存到: out.jpg\n");
+            printf("结果已保存到: out.jpg，耗时: %ld ms\n", save_time);
         }
+
+        // 计算总处理时间
+        struct timeval total_end;
+        gettimeofday(&total_end, NULL);
+        long total_time = (total_end.tv_sec - read_start.tv_sec) * 1000 +
+                         (total_end.tv_usec - read_start.tv_usec) / 1000;
+        printf("单张图片总处理时间: %ld ms\n", total_time);
     }
 
 out:

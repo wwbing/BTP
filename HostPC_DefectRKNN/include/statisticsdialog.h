@@ -5,7 +5,6 @@
 #include <QMap>
 #include <QVector>
 #include <QPair>
-#include <QTabWidget>
 #include <QChartView>
 #include <QPieSeries>
 #include <QBarSeries>
@@ -15,6 +14,8 @@
 #include <QHBoxLayout>
 #include <QPushButton>
 #include <QLabel>
+#include <QScrollArea>
+#include <QFrame>
 
 class StatisticsDialog : public QDialog
 {
@@ -34,25 +35,35 @@ public:
 
 private:
     void setupUI();
-    void createSummaryTab();
-    QWidget* createDefectCountChart();
-    QWidget* createDefectRatioChart();
-    QWidget* createConfidenceDistributionChart();
-    void createImageDistributionChart();
+    QWidget* createDashboard();
+    QWidget* createKpiCards();
+    QWidget* createChartsRow();
+    QWidget* createDetailsRow();
 
-    QWidget* createPieChart(const QMap<QString, int> &data, const QString &title);
-    QWidget* createBarChart(const QMap<QString, int> &data, const QString &title);
-    QWidget* createHistogram(const QMap<QString, QPair<int, int>> &distribution, const QString &defectType);
+    // KPI卡片创建
+    QWidget* createKpiCard(const QString &title, const QString &value, const QString &unit,
+                           const QString &icon, const QColor &accentColor);
 
-    DefectStatistics statistics;
-    QTabWidget *tabWidget;
-    QVBoxLayout *mainLayout;
+    // 图表创建
+    QWidget* createChartCard(const QString &title, QWidget *chartWidget);
+    QWidget* createDefectPieChart();
+    QWidget* createDefectBarChart();
+    QWidget* createConfidenceChart();
+    QWidget* createDefectDetailsTable();
+    QWidget* createEmptyWidget(const QString &message);
 
     // 辅助方法
-    QMap<QString, QPair<int, int>> calculateConfidenceDistribution(const QString &defectType) const;
     QMap<QString, QPair<int, int>> calculateTotalConfidenceDistribution(const QVector<float> &allConfidences) const;
     QMap<QString, double> calculateDefectRatios() const;
     double calculateAverageConfidence(const QVector<float> &confidences) const;
+
+    // 样式辅助
+    QString getCardStyle(const QColor &accentColor) const;
+    QString getSectionTitleStyle() const;
+
+    DefectStatistics statistics;
+    QVBoxLayout *mainLayout;
+    QScrollArea *scrollArea;
 };
 
 #endif // STATISTICSDIALOG_H

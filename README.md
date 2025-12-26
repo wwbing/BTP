@@ -1,12 +1,12 @@
 # BTP - RKNN 模型推理项目
 
-基于 Rockchip NPU 的高性能 YOLOv6 目标检测推理实现，专为 RK3588 等嵌入式平台优化。
+基于 Rockchip NPU 的高性能 SD-GASNet 目标检测推理实现，专为 RK3588 等嵌入式平台优化。
 
 ## 项目概述
 
 本项目包含两个主要组件：
 
-1. **BTP (缺陷检测)** - 基于 RKNN 的 YOLOv6 目标检测推理核心
+1. **BTP (缺陷检测)** - 基于 RKNN 的 SD-GASNet 目标检测推理核心
 2. **HostPC_DefectRKNN** - 桌面 GUI 应用程序，提供图形化界面进行模型推理
 
 项目支持在 RK3588、RK356x、RK3576 和其他 Rockchip 平台上运行各种计算机视觉模型，当前配置用于缺陷检测应用。

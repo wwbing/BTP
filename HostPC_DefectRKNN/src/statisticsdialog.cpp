@@ -1,15 +1,11 @@
 #include "statisticsdialog.h"
-#include <QTabWidget>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QPushButton>
 #include <QLabel>
-#include <QGroupBox>
 #include <QScrollArea>
 #include <QGridLayout>
-#include <QSpacerItem>
 #include <QDebug>
-#include <QMessageBox>
 #include <QtCharts/QChartView>
 #include <QtCharts/QPieSeries>
 #include <QtCharts/QBarSeries>
@@ -19,16 +15,43 @@
 #include <QtCharts/QValueAxis>
 #include <QtCharts/QBarCategoryAxis>
 #include <QtCharts/QLegend>
+#include <QFrame>
+#include <QTableWidget>
+#include <QHeaderView>
+#include <QFont>
+#include <QFontDatabase>
+#include <QGraphicsLayout>
 
 QT_CHARTS_USE_NAMESPACE
+
+// 现代配色方案
+namespace Colors {
+    const QColor PRIMARY = QColor(79, 70, 229);       // 靛蓝
+    const QColor SUCCESS = QColor(16, 185, 129);      // 翠绿
+    const QColor WARNING = QColor(245, 158, 11);      // 琥珀
+    const QColor DANGER = QColor(239, 68, 68);        // 珊瑚红
+    const QColor INFO = QColor(59, 130, 246);         // 天蓝
+    const QColor PURPLE = QColor(139, 92, 246);       // 紫色
+    const QColor CYAN = QColor(6, 182, 212);          // 青色
+
+    // 渐变色
+    const QList<QColor> CHART_COLORS = {
+        QColor(99, 102, 241),   // 靛蓝
+        QColor(236, 72, 153),   // 粉红
+        QColor(16, 185, 129),   // 翠绿
+        QColor(245, 158, 11),   // 琥珀
+        QColor(59, 130, 246),   // 天蓝
+        QColor(139, 92, 246)    // 紫色
+    };
+}
 
 StatisticsDialog::StatisticsDialog(const DefectStatistics &stats, QWidget *parent)
     : QDialog(parent), statistics(stats)
 {
-    setWindowTitle("批量检测统计结果");
-    setMinimumSize(1000, 700);
+    setWindowTitle("缺陷检测统计分析");
+    setMinimumSize(1400, 850);
+    resize(1600, 950);
 
-    
     setupUI();
 }
 
@@ -38,178 +61,335 @@ StatisticsDialog::~StatisticsDialog()
 
 void StatisticsDialog::setupUI()
 {
+    // 设置主窗口样式
+    setStyleSheet(R"(
+        QDialog {
+            background-color: #f8fafc;
+        }
+        QPushButton {
+            background-color: #4f46e5;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 24px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        QPushButton:hover {
+            background-color: #4338ca;
+        }
+        QPushButton:pressed {
+            background-color: #3730a3;
+        }
+    )");
+
     mainLayout = new QVBoxLayout(this);
+    mainLayout->setContentsMargins(20, 20, 20, 20);
+    mainLayout->setSpacing(16);
 
-    // 创建标题
-    QLabel *titleLabel = new QLabel("批量检测统计分析报告", this);
-    titleLabel->setStyleSheet("font-size: 18px; font-weight: bold; padding: 10px; color: #333;");
-    titleLabel->setAlignment(Qt::AlignCenter);
-    mainLayout->addWidget(titleLabel);
+    // 标题栏
+    QWidget *titleBar = new QWidget();
+    QHBoxLayout *titleLayout = new QHBoxLayout(titleBar);
+    titleLayout->setContentsMargins(0, 0, 0, 0);
 
-    // 创建选项卡
-    tabWidget = new QTabWidget(this);
-    mainLayout->addWidget(tabWidget);
+    QLabel *titleLabel = new QLabel("缺陷检测统计分析报告");
+    QFont titleFont = titleLabel->font();
+    titleFont.setPointSize(20);
+    titleFont.setBold(true);
+    titleLabel->setFont(titleFont);
+    titleLabel->setStyleSheet("color: #1e293b;");
 
-    // 添加各个选项卡
-    createSummaryTab();
-    tabWidget->addTab(createDefectCountChart(), "缺陷数量统计");
-    tabWidget->addTab(createDefectRatioChart(), "缺陷比例分析");
-    tabWidget->addTab(createConfidenceDistributionChart(), "置信度分布");
+    QLabel *subtitleLabel = new QLabel("智能质量检测系统 | 批量检测结果");
+    subtitleLabel->setStyleSheet("color: #64748b; font-size: 13px;");
 
-    // 创建关闭按钮
+    QVBoxLayout *titleTextLayout = new QVBoxLayout();
+    titleTextLayout->addWidget(titleLabel);
+    titleTextLayout->addWidget(subtitleLabel);
+    titleTextLayout->setSpacing(4);
+
+    titleLayout->addLayout(titleTextLayout);
+    titleLayout->addStretch();
+
+    mainLayout->addWidget(titleBar);
+
+    // 创建滚动区域和仪表板
+    scrollArea = new QScrollArea();
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    scrollArea->setStyleSheet("QScrollArea { background-color: transparent; border: none; }");
+
+    QWidget *dashboard = createDashboard();
+    scrollArea->setWidget(dashboard);
+
+    mainLayout->addWidget(scrollArea);
+
+    // 底部按钮栏
     QHBoxLayout *buttonLayout = new QHBoxLayout();
-    QPushButton *closeButton = new QPushButton("关闭", this);
-    closeButton->setStyleSheet("QPushButton { padding: 8px 20px; font-weight: bold; }");
+    buttonLayout->setContentsMargins(0, 8, 0, 0);
+
+    QPushButton *exportButton = new QPushButton("导出报告");
+    exportButton->setStyleSheet(R"(
+        QPushButton {
+            background-color: #10b981;
+        }
+        QPushButton:hover {
+            background-color: #059669;
+        }
+    )");
+
+    QPushButton *closeButton = new QPushButton("关闭");
+    closeButton->setStyleSheet(R"(
+        QPushButton {
+            background-color: #64748b;
+        }
+        QPushButton:hover {
+            background-color: #475569;
+        }
+    )");
     connect(closeButton, &QPushButton::clicked, this, &StatisticsDialog::close);
 
     buttonLayout->addStretch();
+    buttonLayout->addWidget(exportButton);
+    buttonLayout->addSpacing(12);
     buttonLayout->addWidget(closeButton);
-    buttonLayout->addStretch();
 
     mainLayout->addLayout(buttonLayout);
 }
 
-void StatisticsDialog::createSummaryTab()
+QWidget* StatisticsDialog::createDashboard()
 {
-    QWidget *summaryWidget = new QWidget();
-    QGridLayout *gridLayout = new QGridLayout(summaryWidget);
+    QWidget *dashboard = new QWidget();
+    QVBoxLayout *layout = new QVBoxLayout(dashboard);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(20);
 
-    // 计算统计数据
-    QMap<QString, double> defectRatios = calculateDefectRatios();
+    // KPI指标卡片
+    layout->addWidget(createKpiCards());
 
-    // 创建基本统计信息组
-    QGroupBox *basicGroup = new QGroupBox("基本统计信息", this);
-    QGridLayout *basicLayout = new QGridLayout(basicGroup);
+    // 图表行
+    layout->addWidget(createChartsRow());
 
-    basicLayout->addWidget(new QLabel("总图片数："), 0, 0);
-    basicLayout->addWidget(new QLabel(QString::number(statistics.totalImages)), 0, 1);
+    // 详情行
+    layout->addWidget(createDetailsRow());
 
-    basicLayout->addWidget(new QLabel("有缺陷图片数："), 1, 0);
-    basicLayout->addWidget(new QLabel(QString::number(statistics.imagesWithDefects)), 1, 1);
+    layout->addStretch();
 
-    double defectRate = statistics.totalImages > 0 ?
-                      (double)statistics.imagesWithDefects / statistics.totalImages * 100 : 0;
-    basicLayout->addWidget(new QLabel("缺陷图片占比："), 2, 0);
-    basicLayout->addWidget(new QLabel(QString("%1%").arg(defectRate, 0, 'f', 1)), 2, 1);
+    return dashboard;
+}
+
+QWidget* StatisticsDialog::createKpiCards()
+{
+    QWidget *container = new QWidget();
+    QHBoxLayout *layout = new QHBoxLayout(container);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(16);
 
     int totalDefects = 0;
     for (int count : statistics.defectCounts) {
         totalDefects += count;
     }
 
-    basicLayout->addWidget(new QLabel("缺陷总数："), 3, 0);
-    basicLayout->addWidget(new QLabel(QString::number(totalDefects)), 3, 1);
+    double defectRate = statistics.totalImages > 0 ?
+                      (double)statistics.imagesWithDefects / statistics.totalImages * 100 : 0;
 
     double avgDefectsPerImage = statistics.imagesWithDefects > 0 ?
                                (double)totalDefects / statistics.imagesWithDefects : 0;
-    basicLayout->addWidget(new QLabel("平均每张图片缺陷数："), 4, 0);
-    basicLayout->addWidget(new QLabel(QString("%1").arg(avgDefectsPerImage, 0, 'f', 2)), 4, 1);
 
-    gridLayout->addWidget(basicGroup, 0, 0, 1, 2);
-
-    // 创建各类型缺陷统计组
-    QGroupBox *defectDetailGroup = new QGroupBox("各类型缺陷详细统计", this);
-    QVBoxLayout *defectDetailLayout = new QVBoxLayout(defectDetailGroup);
-
-    // 创建表格显示详细信息
-    QTabWidget *defectTableWidget = new QTabWidget(this);
-
-    // 缺陷数量表格
-    QWidget *countWidget = new QWidget();
-    QGridLayout *countLayout = new QGridLayout(countWidget);
-    countLayout->addWidget(new QLabel("缺陷类型"), 0, 0);
-    countLayout->addWidget(new QLabel("数量"), 0, 1);
-    countLayout->addWidget(new QLabel("占比"), 0, 2);
-    countLayout->addWidget(new QLabel("影响图片数"), 0, 3);
-
-    int row = 1;
-    for (auto it = statistics.defectCounts.begin(); it != statistics.defectCounts.end(); ++it) {
-        QString defectType = it.key();
-        int count = it.value();
-        double ratio = totalDefects > 0 ? (double)count / totalDefects * 100 : 0;
-        int imageCount = statistics.defectImageCounts.value(defectType, 0);
-
-        countLayout->addWidget(new QLabel(defectType), row, 0);
-        countLayout->addWidget(new QLabel(QString::number(count)), row, 1);
-        countLayout->addWidget(new QLabel(QString("%1%").arg(ratio, 0, 'f', 1)), row, 2);
-        countLayout->addWidget(new QLabel(QString::number(imageCount)), row, 3);
-        row++;
+    QVector<float> allConfidences;
+    for (auto it = statistics.defectConfidences.begin(); it != statistics.defectConfidences.end(); ++it) {
+        allConfidences.append(it.value());
     }
+    double avgConfidence = calculateAverageConfidence(allConfidences);
 
-    defectTableWidget->addTab(countWidget, "缺陷数量");
-    defectDetailLayout->addWidget(defectTableWidget);
+    // 创建KPI卡片
+    layout->addWidget(createKpiCard("总检测图片", QString::number(statistics.totalImages), "张",
+                                   "📷", Colors::INFO), 1);
+    layout->addWidget(createKpiCard("缺陷图片数", QString::number(statistics.imagesWithDefects), "张",
+                                   "🔍", Colors::WARNING), 1);
+    layout->addWidget(createKpiCard("缺陷检出率", QString("%1%").arg(defectRate, 0, 'f', 1), "",
+                                   "📊", Colors::PRIMARY), 1);
+    layout->addWidget(createKpiCard("缺陷总数", QString::number(totalDefects), "个",
+                                   "⚠️", Colors::DANGER), 1);
+    layout->addWidget(createKpiCard("平均置信度", QString("%1").arg(avgConfidence, 0, 'f', 3), "",
+                                   "✓", Colors::SUCCESS), 1);
 
-    gridLayout->addWidget(defectDetailGroup, 1, 0, 1, 2);
-
-    // 添加弹簧
-    gridLayout->setRowStretch(2, 1);
-
-    tabWidget->addTab(summaryWidget, "汇总信息");
+    return container;
 }
 
-QWidget* StatisticsDialog::createDefectCountChart()
+QWidget* StatisticsDialog::createKpiCard(const QString &title, const QString &value,
+                                         const QString &unit, const QString &icon,
+                                         const QColor &accentColor)
+{
+    QFrame *card = new QFrame();
+    card->setStyleSheet(getCardStyle(accentColor));
+
+    QVBoxLayout *cardLayout = new QVBoxLayout(card);
+    cardLayout->setContentsMargins(20, 16, 20, 16);
+    cardLayout->setSpacing(8);
+
+    // 标题和图标
+    QHBoxLayout *headerLayout = new QHBoxLayout();
+    headerLayout->setSpacing(12);
+
+    QLabel *iconLabel = new QLabel(icon);
+    iconLabel->setStyleSheet(QString("font-size: 28px; background-color: %1; padding: 8px; "
+                                     "border-radius: 12px; min-width: 48px; min-height: 48px;")
+                             .arg(QString("rgba(%1, %2, %3, 30)")
+                                  .arg(accentColor.red())
+                                  .arg(accentColor.green())
+                                  .arg(accentColor.blue())));
+
+    QLabel *titleLabel = new QLabel(title);
+    titleLabel->setStyleSheet("color: #64748b; font-size: 13px; font-weight: 500;");
+
+    headerLayout->addWidget(iconLabel);
+    headerLayout->addWidget(titleLabel, 1);
+    cardLayout->addLayout(headerLayout);
+
+    // 数值
+    QHBoxLayout *valueLayout = new QHBoxLayout();
+    valueLayout->setSpacing(4);
+
+    QLabel *valueLabel = new QLabel(value);
+    valueLabel->setStyleSheet(QString("color: %1; font-size: 32px; font-weight: 700; letter-spacing: -1px;")
+                             .arg(QString("rgb(%1, %2, %3)")
+                                  .arg(accentColor.red())
+                                  .arg(accentColor.green())
+                                  .arg(accentColor.blue())));
+
+    QLabel *unitLabel = new QLabel(unit);
+    unitLabel->setStyleSheet("color: #94a3b8; font-size: 14px; font-weight: 500;");
+    unitLabel->setAlignment(Qt::AlignBottom);
+
+    valueLayout->addWidget(valueLabel);
+    valueLayout->addWidget(unitLabel);
+    valueLayout->addStretch();
+    cardLayout->addLayout(valueLayout);
+
+    return card;
+}
+
+QWidget* StatisticsDialog::createChartsRow()
+{
+    QWidget *container = new QWidget();
+    QHBoxLayout *layout = new QHBoxLayout(container);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(16);
+
+    // 饼图 - 缺陷分布
+    QWidget *pieCard = createChartCard("缺陷类型分布", createDefectPieChart());
+    layout->addWidget(pieCard, 1);
+
+    // 柱状图 - 缺陷对比
+    QWidget *barCard = createChartCard("各类型缺陷数量对比", createDefectBarChart());
+    layout->addWidget(barCard, 1);
+
+    return container;
+}
+
+QWidget* StatisticsDialog::createChartCard(const QString &title, QWidget *chartWidget)
+{
+    QFrame *card = new QFrame();
+    card->setStyleSheet(R"(
+        QFrame {
+            background-color: white;
+            border-radius: 16px;
+            border: 1px solid #e2e8f0;
+        }
+    )");
+
+    QVBoxLayout *cardLayout = new QVBoxLayout(card);
+    cardLayout->setContentsMargins(20, 16, 20, 16);
+    cardLayout->setSpacing(12);
+
+    // 标题
+    QLabel *titleLabel = new QLabel(title);
+    QFont titleFont = titleLabel->font();
+    titleFont.setPointSize(14);
+    titleFont.setBold(true);
+    titleLabel->setFont(titleFont);
+    titleLabel->setStyleSheet("color: #1e293b; padding-left: 8px; border-left: 4px solid #4f46e5;");
+
+    cardLayout->addWidget(titleLabel);
+    cardLayout->addWidget(chartWidget, 1);
+
+    return card;
+}
+
+QWidget* StatisticsDialog::createDetailsRow()
+{
+    QWidget *container = new QWidget();
+    QHBoxLayout *layout = new QHBoxLayout(container);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(16);
+
+    // 置信度分布图
+    QWidget *confidenceCard = createChartCard("置信度分布分析", createConfidenceChart());
+    layout->addWidget(confidenceCard, 1);
+
+    // 详细统计表格
+    QWidget *tableCard = createChartCard("缺陷详细统计", createDefectDetailsTable());
+    layout->addWidget(tableCard, 1);
+
+    return container;
+}
+
+QWidget* StatisticsDialog::createDefectPieChart()
 {
     if (statistics.defectCounts.isEmpty()) {
-        QLabel *noDataLabel = new QLabel("暂无缺陷数据");
-        noDataLabel->setAlignment(Qt::AlignCenter);
-        QWidget *widget = new QWidget();
-        QVBoxLayout *layout = new QVBoxLayout(widget);
-        layout->addWidget(noDataLabel);
-        return new QChartView(new QChart(), widget);
+        return createEmptyWidget("暂无缺陷数据");
     }
 
     QPieSeries *series = new QPieSeries();
 
-    // 使用更醒目的颜色
-    QList<QColor> colors = {
-        QColor(255, 99, 132),   // 红色
-        QColor(54, 162, 235),   // 蓝色
-        QColor(255, 205, 86),   // 黄色
-        QColor(75, 192, 192),   // 青色
-        QColor(153, 102, 255),  // 紫色
-        QColor(255, 159, 64)    // 橙色
-    };
-
     int colorIndex = 0;
     for (auto it = statistics.defectCounts.begin(); it != statistics.defectCounts.end(); ++it) {
-        QString label = QString("%1 (%2)").arg(it.key()).arg(it.value());
+        QString label = QString("%1\n%2").arg(it.key()).arg(it.value());
         QPieSlice *slice = series->append(label, it.value());
 
-        if (colorIndex < colors.size()) {
-            slice->setColor(colors[colorIndex]);
+        if (colorIndex < Colors::CHART_COLORS.size()) {
+            slice->setColor(Colors::CHART_COLORS[colorIndex]);
         }
         slice->setLabelVisible(true);
         slice->setLabelPosition(QPieSlice::LabelPosition::LabelOutside);
-        slice->setLabelBrush(QBrush(Qt::black));
+        slice->setLabelBrush(QBrush(QColor(51, 65, 85)));
+
+        QFont labelFont = slice->labelFont();
+        labelFont.setPointSize(11);
+        labelFont.setBold(true);
+        slice->setLabelFont(labelFont);
 
         colorIndex++;
     }
 
     QChart *chart = new QChart();
     chart->addSeries(series);
-    chart->setTitle("各类型缺陷数量分布");
-    chart->legend()->setVisible(true);
+    chart->setMargins(QMargins(0, 0, 0, 0));
+    chart->legend()->setVisible(false);
+    chart->setBackgroundRoundness(0);
     chart->setAnimationOptions(QChart::SeriesAnimations);
+    chart->layout()->setContentsMargins(0, 0, 0, 0);
 
     QChartView *chartView = new QChartView(chart);
     chartView->setRenderHint(QPainter::Antialiasing);
+    chartView->setStyleSheet("background-color: transparent; border: none;");
 
     return chartView;
 }
 
-QWidget* StatisticsDialog::createDefectRatioChart()
+QWidget* StatisticsDialog::createDefectBarChart()
 {
     if (statistics.defectCounts.isEmpty()) {
-        QLabel *noDataLabel = new QLabel("暂无缺陷数据");
-        noDataLabel->setAlignment(Qt::AlignCenter);
-        QWidget *widget = new QWidget();
-        QVBoxLayout *layout = new QVBoxLayout(widget);
-        layout->addWidget(noDataLabel);
-        return new QChartView(new QChart(), widget);
+        return createEmptyWidget("暂无缺陷数据");
     }
 
     QBarSeries *series = new QBarSeries();
     QBarSet *defectSet = new QBarSet("缺陷数量");
+
+    // 设置柱状图颜色
+    defectSet->setColor(Colors::PRIMARY);
+    defectSet->setBorderColor(Colors::PRIMARY);
+    defectSet->setLabelColor(QColor(51, 65, 85));
 
     QStringList categories;
     QList<int> values;
@@ -219,92 +399,71 @@ QWidget* StatisticsDialog::createDefectRatioChart()
         values.append(it.value());
     }
 
-    // 将QList<int>转换为QList<qreal>
-        QList<qreal> realValues;
-        for (int value : values) {
-            realValues.append(value);
-        }
-        defectSet->append(realValues);
+    QList<qreal> realValues;
+    for (int value : values) {
+        realValues.append(value);
+    }
+    defectSet->append(realValues);
     series->append(defectSet);
 
     QChart *chart = new QChart();
     chart->addSeries(series);
-    chart->setTitle("各类型缺陷数量对比");
+    chart->setMargins(QMargins(10, 10, 10, 20));
+    chart->legend()->setVisible(false);
+    chart->setBackgroundRoundness(0);
+    chart->setAnimationOptions(QChart::SeriesAnimations);
 
     QBarCategoryAxis *axis = new QBarCategoryAxis();
     axis->append(categories);
+    axis->setGridLineVisible(false);
+    axis->setLabelsColor(QColor(71, 85, 105));
+    axis->setLabelsFont(QFont("Arial", 10));
     chart->addAxis(axis, Qt::AlignBottom);
     series->attachAxis(axis);
 
     QValueAxis *valueAxis = new QValueAxis();
+    valueAxis->setGridLineVisible(true);
+    valueAxis->setGridLineColor(QColor(241, 245, 249));
+    valueAxis->setLabelsColor(QColor(71, 85, 105));
     chart->addAxis(valueAxis, Qt::AlignLeft);
     series->attachAxis(valueAxis);
 
-    chart->legend()->setVisible(true);
-    chart->setAnimationOptions(QChart::SeriesAnimations);
-
     QChartView *chartView = new QChartView(chart);
     chartView->setRenderHint(QPainter::Antialiasing);
+    chartView->setMinimumHeight(350);
+    chartView->setStyleSheet("background-color: transparent; border: none;");
 
     return chartView;
 }
 
-QWidget* StatisticsDialog::createConfidenceDistributionChart()
+QWidget* StatisticsDialog::createConfidenceChart()
 {
     QWidget *container = new QWidget();
     QVBoxLayout *layout = new QVBoxLayout(container);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(12);
 
     if (statistics.defectConfidences.isEmpty()) {
-        QLabel *noDataLabel = new QLabel("暂无置信度数据");
-        noDataLabel->setAlignment(Qt::AlignCenter);
-        layout->addWidget(noDataLabel);
+        layout->addWidget(createEmptyWidget("暂无置信度数据"));
         return container;
     }
 
-    // 收集所有缺陷类型的置信度数据，计算总的分布
     QVector<float> allConfidences;
     for (auto it = statistics.defectConfidences.begin(); it != statistics.defectConfidences.end(); ++it) {
         allConfidences.append(it.value());
     }
 
     if (allConfidences.isEmpty()) {
-        QLabel *noDataLabel = new QLabel("暂无置信度数据");
-        noDataLabel->setAlignment(Qt::AlignCenter);
-        layout->addWidget(noDataLabel);
+        layout->addWidget(createEmptyWidget("暂无置信度数据"));
         return container;
     }
 
-    // 计算总的置信度分布
-    QMap<QString, QPair<int, int>> totalDistribution = calculateTotalConfidenceDistribution(allConfidences);
+    QMap<QString, QPair<int, int>> distribution = calculateTotalConfidenceDistribution(allConfidences);
 
-    // 创建总的置信度分布图
-    QWidget *chartWidget = createHistogram(totalDistribution, "总体置信度分布");
-    layout->addWidget(chartWidget);
-
-    // 添加统计信息
-    QLabel *statsLabel = new QLabel();
-    QString statsText = QString("总样本数: %1\n"
-                               "平均置信度: %2\n"
-                               "最高置信度: %3\n"
-                               "最低置信度: %4")
-                          .arg(allConfidences.size())
-                          .arg(calculateAverageConfidence(allConfidences), 0, 'f', 3)
-                          .arg(*std::max_element(allConfidences.begin(), allConfidences.end()), 0, 'f', 3)
-                          .arg(*std::min_element(allConfidences.begin(), allConfidences.end()), 0, 'f', 3);
-
-    statsLabel->setText(statsText);
-    statsLabel->setStyleSheet("QLabel { padding: 10px; background-color: #f0f0f0; border-radius: 5px; }");
-    layout->addWidget(statsLabel);
-
-    layout->addStretch();
-
-    return container;
-}
-
-QWidget* StatisticsDialog::createHistogram(const QMap<QString, QPair<int, int>> &distribution, const QString &defectType)
-{
     QBarSeries *series = new QBarSeries();
-    QBarSet *countSet = new QBarSet("数量");
+    QBarSet *countSet = new QBarSet("样本数量");
+    countSet->setColor(Colors::CYAN);
+    countSet->setBorderColor(Colors::CYAN);
 
     QStringList categories;
     QList<int> values;
@@ -314,7 +473,6 @@ QWidget* StatisticsDialog::createHistogram(const QMap<QString, QPair<int, int>> 
         values.append(it.value().first);
     }
 
-    // 将QList<int>转换为QList<qreal>
     QList<qreal> realValues;
     for (int value : values) {
         realValues.append(value);
@@ -324,72 +482,186 @@ QWidget* StatisticsDialog::createHistogram(const QMap<QString, QPair<int, int>> 
 
     QChart *chart = new QChart();
     chart->addSeries(series);
-    chart->setTitle(QString("%1 置信度分布").arg(defectType));
+    chart->setMargins(QMargins(10, 0, 10, 10));
+    chart->legend()->setVisible(false);
+    chart->setBackgroundRoundness(0);
+    chart->setAnimationOptions(QChart::SeriesAnimations);
 
     QBarCategoryAxis *axis = new QBarCategoryAxis();
     axis->append(categories);
+    axis->setGridLineVisible(false);
+    axis->setLabelsColor(QColor(71, 85, 105));
     chart->addAxis(axis, Qt::AlignBottom);
     series->attachAxis(axis);
 
     QValueAxis *valueAxis = new QValueAxis();
+    valueAxis->setGridLineVisible(true);
+    valueAxis->setGridLineColor(QColor(241, 245, 249));
+    valueAxis->setLabelsColor(QColor(71, 85, 105));
     chart->addAxis(valueAxis, Qt::AlignLeft);
     series->attachAxis(valueAxis);
 
-    chart->legend()->setVisible(true);
-    chart->setAnimationOptions(QChart::SeriesAnimations);
-
     QChartView *chartView = new QChartView(chart);
     chartView->setRenderHint(QPainter::Antialiasing);
-    chartView->setMinimumHeight(300);
+    chartView->setMinimumHeight(220);
+    chartView->setStyleSheet("background-color: transparent; border: none;");
 
-    return chartView;
+    layout->addWidget(chartView);
+
+    // 统计信息
+    QLabel *statsLabel = new QLabel();
+    QString statsText = QString(
+        "总样本: <b style='color: #4f46e5;'>%1</b> | "
+        "平均: <b style='color: #10b981;'>%2</b> | "
+        "最高: <b style='color: #059669;'>%3</b> | "
+        "最低: <b style='color: #dc2626;'>%4</b>"
+    ).arg(allConfidences.size())
+     .arg(calculateAverageConfidence(allConfidences), 0, 'f', 3)
+     .arg(*std::max_element(allConfidences.begin(), allConfidences.end()), 0, 'f', 3)
+     .arg(*std::min_element(allConfidences.begin(), allConfidences.end()), 0, 'f', 3);
+
+    statsLabel->setText(statsText);
+    statsLabel->setStyleSheet(
+        "QLabel { "
+        "padding: 12px 16px; "
+        "background: qlineargradient(x1:0, y1:0, x2:1, y2:0, "
+        "stop:0 rgba(79, 70, 229, 0.08), stop:1 rgba(16, 185, 129, 0.08)); "
+        "border-radius: 8px; "
+        "color: #475569; "
+        "font-size: 13px; "
+        "}"
+    );
+    layout->addWidget(statsLabel);
+
+    return container;
 }
 
-QMap<QString, QPair<int, int>> StatisticsDialog::calculateConfidenceDistribution(const QString &defectType) const {
-    QMap<QString, QPair<int, int>> distribution;
+QWidget* StatisticsDialog::createDefectDetailsTable()
+{
+    QWidget *container = new QWidget();
+    QVBoxLayout *layout = new QVBoxLayout(container);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
 
-    QVector<float> confidences = statistics.defectConfidences.value(defectType);
-    if (confidences.isEmpty()) {
-        return distribution;
-    }
-
-    // 定义置信度区间
-    distribution["0.0-0.5"] = qMakePair(0, 0);
-    distribution["0.5-0.6"] = qMakePair(0, 0);
-    distribution["0.6-0.7"] = qMakePair(0, 0);
-    distribution["0.7-0.8"] = qMakePair(0, 0);
-    distribution["0.8-0.9"] = qMakePair(0, 0);
-    distribution["0.9-1.0"] = qMakePair(0, 0);
-
-    for (float confidence : confidences) {
-        if (confidence < 0.5) {
-            distribution["0.0-0.5"].first++;
-            distribution["0.0-0.5"].second++;
-        } else if (confidence < 0.6) {
-            distribution["0.5-0.6"].first++;
-            distribution["0.5-0.6"].second++;
-        } else if (confidence < 0.7) {
-            distribution["0.6-0.7"].first++;
-            distribution["0.6-0.7"].second++;
-        } else if (confidence < 0.8) {
-            distribution["0.7-0.8"].first++;
-            distribution["0.7-0.8"].second++;
-        } else if (confidence < 0.9) {
-            distribution["0.8-0.9"].first++;
-            distribution["0.8-0.9"].second++;
-        } else {
-            distribution["0.9-1.0"].first++;
-            distribution["0.9-1.0"].second++;
+    QTableWidget *table = new QTableWidget();
+    table->setColumnCount(5);
+    table->setHorizontalHeaderLabels({"缺陷类型", "数量", "占比", "影响图片数", "平均置信度"});
+    table->setStyleSheet(R"(
+        QTableWidget {
+            background-color: transparent;
+            border: none;
+            gridline-color: #f1f5f9;
+            font-size: 13px;
         }
+        QTableWidget::item {
+            padding: 8px;
+            border: none;
+            border-bottom: 1px solid #f1f5f9;
+        }
+        QHeaderView::section {
+            background-color: #f8fafc;
+            color: #475569;
+            padding: 12px 8px;
+            border: none;
+            border-bottom: 2px solid #e2e8f0;
+            font-weight: 600;
+            font-size: 13px;
+        }
+        QTableWidget::item:selected {
+            background-color: rgba(79, 70, 229, 0.1);
+        }
+    )");
+
+    table->horizontalHeader()->setStretchLastSection(false);
+    table->verticalHeader()->setVisible(false);
+    table->setShowGrid(false);
+    table->setSelectionMode(QAbstractItemView::SingleSelection);
+    table->setSelectionBehavior(QAbstractItemView::SelectRows);
+
+    int totalDefects = 0;
+    for (int count : statistics.defectCounts) {
+        totalDefects += count;
     }
 
-    return distribution;
+    int row = 0;
+    for (auto it = statistics.defectCounts.begin(); it != statistics.defectCounts.end(); ++it) {
+        QString defectType = it.key();
+        int count = it.value();
+        double ratio = totalDefects > 0 ? (double)count / totalDefects * 100 : 0;
+        int imageCount = statistics.defectImageCounts.value(defectType, 0);
+        QVector<float> confidences = statistics.defectConfidences.value(defectType);
+        double avgConf = calculateAverageConfidence(confidences);
+
+        table->insertRow(row);
+
+        // 缺陷类型 - 带颜色标签
+        QWidget *typeWidget = new QWidget();
+        QHBoxLayout *typeLayout = new QHBoxLayout(typeWidget);
+        typeLayout->setContentsMargins(8, 4, 8, 4);
+
+        QLabel *colorDot = new QLabel();
+        colorDot->setFixedSize(12, 12);
+        int colorIdx = row % Colors::CHART_COLORS.size();
+        colorDot->setStyleSheet(QString(
+            "background-color: rgb(%1, %2, %3); border-radius: 6px;"
+        ).arg(Colors::CHART_COLORS[colorIdx].red())
+         .arg(Colors::CHART_COLORS[colorIdx].green())
+         .arg(Colors::CHART_COLORS[colorIdx].blue()));
+
+        QLabel *typeLabel = new QLabel(defectType);
+        typeLabel->setStyleSheet("color: #1e293b; font-weight: 600;");
+
+        typeLayout->addWidget(colorDot);
+        typeLayout->addWidget(typeLabel);
+        typeLayout->addStretch();
+
+        table->setCellWidget(row, 0, typeWidget);
+        table->setItem(row, 1, new QTableWidgetItem(QString::number(count)));
+        table->setItem(row, 2, new QTableWidgetItem(QString("%1%").arg(ratio, 0, 'f', 1)));
+        table->setItem(row, 3, new QTableWidgetItem(QString::number(imageCount)));
+        table->setItem(row, 4, new QTableWidgetItem(QString("%1").arg(avgConf, 0, 'f', 3)));
+
+        // 设置样式
+        for (int col = 1; col <= 4; ++col) {
+            QTableWidgetItem *item = table->item(row, col);
+            if (item) {
+                item->setTextAlignment(Qt::AlignCenter);
+                item->setForeground(QColor(51, 65, 85));
+            }
+        }
+
+        row++;
+    }
+
+    // 设置列宽：第一列固定宽度，其他列自适应
+    table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
+    table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
+    table->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
+    table->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Stretch);
+
+    // 设置第一列的固定宽度（确保缺陷类型完整显示）
+    table->setColumnWidth(0, 180);
+
+    layout->addWidget(table);
+
+    return container;
+}
+
+QWidget* StatisticsDialog::createEmptyWidget(const QString &message)
+{
+    QLabel *label = new QLabel(message);
+    label->setAlignment(Qt::AlignCenter);
+    label->setStyleSheet(
+        "color: #94a3b8; font-size: 14px; padding: 40px; "
+        "background-color: #f8fafc; border-radius: 8px; border: 2px dashed #e2e8f0;"
+    );
+    return label;
 }
 
 QMap<QString, QPair<int, int>> StatisticsDialog::calculateTotalConfidenceDistribution(const QVector<float> &allConfidences) const {
     QMap<QString, QPair<int, int>> distribution;
 
-    // 定义置信度区间
     distribution["0.0-0.5"] = qMakePair(0, 0);
     distribution["0.5-0.6"] = qMakePair(0, 0);
     distribution["0.6-0.7"] = qMakePair(0, 0);
@@ -400,22 +672,16 @@ QMap<QString, QPair<int, int>> StatisticsDialog::calculateTotalConfidenceDistrib
     for (float confidence : allConfidences) {
         if (confidence < 0.5) {
             distribution["0.0-0.5"].first++;
-            distribution["0.0-0.5"].second++;
         } else if (confidence < 0.6) {
             distribution["0.5-0.6"].first++;
-            distribution["0.5-0.6"].second++;
         } else if (confidence < 0.7) {
             distribution["0.6-0.7"].first++;
-            distribution["0.6-0.7"].second++;
         } else if (confidence < 0.8) {
             distribution["0.7-0.8"].first++;
-            distribution["0.7-0.8"].second++;
         } else if (confidence < 0.9) {
             distribution["0.8-0.9"].first++;
-            distribution["0.8-0.9"].second++;
         } else {
             distribution["0.9-1.0"].first++;
-            distribution["0.9-1.0"].second++;
         }
     }
 
@@ -452,4 +718,30 @@ QMap<QString, double> StatisticsDialog::calculateDefectRatios() const {
     }
 
     return ratios;
+}
+
+QString StatisticsDialog::getCardStyle(const QColor &accentColor) const {
+    return QString(R"(
+        QFrame {
+            background-color: white;
+            border-radius: 16px;
+            border: 1px solid #e2e8f0;
+        }
+        QFrame:hover {
+            border: 1px solid rgba(%1, %2, %3, 50);
+            box-shadow: 0 4px 20px rgba(%1, %2, %3, 15);
+        }
+    )").arg(accentColor.red())
+         .arg(accentColor.green())
+         .arg(accentColor.blue());
+}
+
+QString StatisticsDialog::getSectionTitleStyle() const {
+    return R"(
+        color: #1e293b;
+        font-size: 16px;
+        font-weight: 600;
+        padding-left: 12px;
+        border-left: 4px solid #4f46e5;
+    )";
 }

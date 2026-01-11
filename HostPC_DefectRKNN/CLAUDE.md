@@ -6,25 +6,91 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 这是一个基于Qt5的RKNN缺陷检测上位机程序，专门用于工业缺陷检测应用。项目集成了Rockchip NPU推理引擎，提供图形化界面进行图像选择、缺陷检测和结果显示。
 
+项目已完成架构重构，采用**三层分层架构**：
+1. **UI层** - 纯界面逻辑，不包含业务逻辑
+2. **服务层** - 可复用的业务逻辑封装
+3. **底层库** - RKNN推理核心（静态链接）
+
 ## 核心架构
 
-### Qt界面层
-- **MainWindow** (`src/mainwindow.cpp`, `include/mainwindow.h`): 主窗口类，负责UI管理和用户交互
-- **主要功能**: 图像选择、RKNN推理、结果显示、状态反馈
-- **UI组件**: 图像显示标签、打开/检测按钮、状态栏
+### 三层架构
 
-### RKNN推理层
-项目通过静态链接方式集成了rknn_infer项目的核心组件：
-- **模型初始化** (`../rknn_infer/src/rknpu2/yolov6.cc`): RKNN模型加载和初始化
-- **后处理** (`../rknn_infer/src/postprocess.cc`): NMS过滤和结果解码
-- **图像处理** (`../rknn_infer/utils/image_utils.c`): 图像读写和预处理
-- **结果绘制** (`../rknn_infer/utils/image_drawing.c`): 原始图像绘制功能
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      UI 层 (Presentation)                   │
+│  ┌─────────────────┐  ┌─────────────────┐                   │
+│  │   MainWindow    │  │  CameraWindow   │                   │
+│  │   (纯界面逻辑)   │  │   (纯界面逻辑)   │                   │
+│  └────────┬────────┘  └────────┬────────┘                   │
+└───────────┼────────────────────┼─────────────────────────────┘
+            │                    │
+            ▼                    ▼
+┌─────────────────────────────────────────────────────────────┐
+│                     服务层 (Services)                       │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
+│  │InferenceEngine│ │ImageProcessor│ │StatisticsService │  │
+│  │  推理引擎封装  │  │  图像处理封装  │  │   统计服务封装   │  │
+│  └──────────────┘  └──────────────┘  └──────────────────┘  │
+│  ┌──────────────┐  ┌─────────────────────────────────────┐ │
+│  │  FileService │  │     DefectColorManager              │ │
+│  │  文件服务封装  │  │       缺陷颜色配置工具类             │ │
+│  └──────────────┘  └─────────────────────────────────────┘ │
+└─────────────────────────┬───────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    底层 RKNN 库 (原库)                       │
+│  rknn_infer/src/rknpu2/yolov6.cc  - RKNN模型推理            │
+│  rknn_infer/src/postprocess.cc    - 后处理 (NMS等)          │
+│  rknn_infer/utils/image_utils.c   - 图像格式转换            │
+└─────────────────────────────────────────────────────────────┘
+```
 
-### 关键依赖
-- **RKNN运行时**: `librknnrt.so` - Rockchip NPU推理引擎
-- **RGA库**: `librga.so` - 硬件加速图像处理
-- **图像处理**: `libturbojpeg.a` - JPEG编解码
-- **Qt5**: Core和Widgets模块 - GUI框架
+### 文件结构
+
+```
+HostPC_DefectRKNN/
+├── include/                    # 头文件
+│   ├── mainwindow.h           # 主窗口（UI层）
+│   ├── camerawindow.h         # 摄像头窗口（UI层）
+│   ├── statisticsdialog.h     # 统计对话框
+│   ├── inferenceengine.h      # 推理引擎服务
+│   ├── imageprocessor.h       # 图像处理服务
+│   ├── statisticsservice.h    # 统计服务
+│   ├── fileservice.h          # 文件服务
+│   └── defect_colors.h        # 缺陷颜色配置
+│
+├── src/                       # 源文件
+│   ├── main.cpp               # 程序入口
+│   ├── mainwindow.cpp         # 主窗口实现
+│   ├── camerawindow.cpp       # 摄像头窗口实现
+│   ├── statisticsdialog.cpp   # 统计对话框实现
+│   ├── inferenceengine.cpp    # 推理引擎实现
+│   ├── imageprocessor.cpp     # 图像处理实现
+│   ├── statisticsservice.cpp  # 统计服务实现
+│   ├── fileservice.cpp        # 文件服务实现
+│   └── defect_colors.cpp      # 颜色配置实现
+│
+├── model/                     # 模型文件
+│   ├── neu-det-new.rknn       # RKNN模型
+│   └── neu-det_6_labels_list.txt
+│
+├── resources/                 # 资源文件
+│   └── logo.png
+│
+├── build/                     # 构建目录
+└── CMakeLists.txt             # 构建配置
+```
+
+### 服务类职责
+
+| 类名 | 职责 | 主要接口 |
+|------|------|---------|
+| `InferenceEngine` | RKNN推理引擎封装 | `initialize()`, `detect()`, `release()` |
+| `ImageProcessor` | 图像处理与绘制 | `drawResults()`, `convertResults()` |
+| `StatisticsService` | 统计收集计算 | `collect()`, `getStatistics()` |
+| `FileService` | 文件操作 | `findImageFiles()`, `saveResultImage()` |
+| `DefectColorManager` | 颜色配置 | `getDefectColorConfig()`, `drawDefectBox()` |
 
 ## 常用命令
 
@@ -58,55 +124,40 @@ rm -rf *
 - **标签文件**: `model/neu-det_6_labels_list.txt` - 6个缺陷类别标签
 - **类别定义**: cr(裂纹), ic(夹杂), ps(压痕), rs(划痕), sc(疤痕), pc(坑点)
 
+### 缺陷类别颜色配置
+- **cr** (裂纹): 红色
+- **ic** (夹杂): 橙色
+- **ps** (压痕): 黄色
+- **rs** (划痕): 绿色
+- **sc** (疤痕): 蓝色
+- **pc** (坑点): 紫色
+
 ### 路径管理
-- **模型路径**: 在`initializeRKNN()`中使用相对路径动态计算
+- **模型路径**: 在`InferenceEngine::initialize()`中使用相对路径动态计算
 - **标签路径**: 程序启动时临时切换工作目录确保标签文件加载
 - **依赖库**: 所有第三方库使用绝对路径链接
-
-### 显示配置
-- **检测框**: 蓝色边框 (COLOR_BLUE: 0xFF0000FF)
-- **标签文字**: 红色文字 (COLOR_RED: 0xFFFF0000)
-- **标签背景**: 半透明白色背景确保文字清晰可见
 
 ## 开发注意事项
 
 ### 头文件依赖管理
-- RKNN相关结构体在cpp文件中包含，避免头文件依赖
-- 使用void*指针管理RKNN上下文，减少编译依赖
-- Qt相关头文件在头文件中包含，RKNN相关在cpp文件中包含
+- RKNN相关头文件在cpp文件中包含，避免头文件依赖循环
+- 服务类使用pimpl模式减少编译依赖
+- UI层头文件不包含底层RKNN头文件
 
 ### 内存管理
-- RKNN应用上下文使用malloc分配，在析构函数中释放
-- 图像缓冲区在使用后需要手动释放virt_addr
-- 使用RAII原则管理Qt对象
+- `InferenceEngine` 使用RAII模式管理RKNN上下文生命周期
+- 图像缓冲区使用malloc/free管理
+- 使用std::unique_ptr管理服务类实例
 
 ### 错误处理
 - 所有关键操作都有返回值检查
-- 错误信息通过状态栏和消息框显示
+- 错误信息通过`getLastError()`获取并显示
 - RKNN初始化失败会禁用检测功能
 
-### 构建系统
-- 使用CMake管理项目，支持compile_commands.json生成
-- 静态链接rknn_infer源码，避免动态库依赖
-- 包含路径使用相对路径，确保可移植性
-
-## 文件结构
-
-```
-HostPC_DefectRKNN/
-├── CMakeLists.txt          # 构建配置
-├── HostPC_DefectRKNN.pro    # Qt项目文件
-├── include/
-│   └── mainwindow.h       # 主窗口头文件
-├── src/
-│   ├── main.cpp           # 程序入口
-│   └── mainwindow.cpp     # 主窗口实现
-├── model/
-│   ├── neu-det-new.rknn  # RKNN模型文件
-│   └── neu-det_6_labels_list.txt  # 标签文件
-├── build/                  # 构建输出目录
-└── resources/             # 资源文件目录
-```
+### 重构原则
+- UI层只负责界面显示，不包含业务逻辑
+- 业务逻辑封装在服务类中，可独立测试
+- 服务类不依赖QtWidgets，便于在其他环境复用
 
 ## 平台支持
 
@@ -120,4 +171,4 @@ HostPC_DefectRKNN/
 - **图像处理**: 使用Qt的QImage和QPainter进行图像显示
 - **内存管理**: 避免不必要的图像拷贝
 - **UI响应**: 使用QApplication::processEvents()保持界面响应
-- **推理效率**: 直接使用rknn_infer的优化实现
+- **推理效率**: 使用多NPU核心并行处理

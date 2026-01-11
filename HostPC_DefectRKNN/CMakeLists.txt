@@ -33,6 +33,12 @@ set(SOURCES
     src/camerawindow.cpp
     src/defect_colors.cpp
     src/statisticsdialog.cpp
+    # 服务类
+    src/inferenceengine.cpp
+    src/imageprocessor.cpp
+    src/statisticsservice.cpp
+    src/fileservice.cpp
+    # RKNN底层库
     ${CMAKE_CURRENT_SOURCE_DIR}/../rknn_infer/src/rknpu2/yolov6.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/../rknn_infer/src/postprocess.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/../rknn_infer/utils/file_utils.c
@@ -45,6 +51,11 @@ set(HEADERS
     include/mainwindow.h
     include/camerawindow.h
     include/statisticsdialog.h
+    # 服务类头文件
+    include/inferenceengine.h
+    include/imageprocessor.h
+    include/statisticsservice.h
+    include/fileservice.h
 )
 
 # RKNN库路径

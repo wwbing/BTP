@@ -29,12 +29,18 @@
 #include <QMap>
 #include <QVector>
 #include <QPair>
+
+#include "camerawindow.h"
+#include "statisticsdialog.h"
+#include "inferenceengine.h"
+#include "statisticsservice.h"
+#include "fileservice.h"
+#include "imageprocessor.h"
+
+// 引入 spdlog
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
-#include "camerawindow.h"
-#include "statisticsdialog.h"
-// RKNN相关头文件将在cpp文件中包含
 
 class MainWindow : public QMainWindow
 {
@@ -56,22 +62,22 @@ private slots:
     void displayInferenceResult(const QImage &resultImage);
     void showPreviousImage();
     void showNextImage();
+    void showStatistics();
     QWidget* createButtonGroup(const QList<QPushButton*> &buttons);
-    
+
 private:
     void setupUI();
-    void initializeRKNN();
+    void initLogger();
+    void initializeEngine();
     void loadImage(const QString &path);
-    bool runRKNNInference(const QImage &inputImage, QImage &outputImage, object_detect_result_list *od_results = nullptr);
     void displayResult(const QImage &image);
-    void processFolder(const QString &folderPath);
-    QStringList findImageFiles(const QString &folderPath);
-    bool saveResultImage(const QImage &image, const QString &originalPath);
-        QImage videoFrameToImage(const QVideoFrame &frame);
+    void updateDefectInfoTable(const object_detect_result_list &od_results);
+
+    // 视频相关
     void initVideoInference();
     void startVideoInference();
     void stopVideoInference();
-    void updateDefectInfoTable(const object_detect_result_list &od_results);
+    QImage videoFrameToImage(const QVideoFrame &frame);
 
     // UI组件
     QPushButton *openButton;
@@ -91,24 +97,22 @@ private:
     QLabel *inferenceResultLabel;
     QTableWidget *defectInfoTable;
     QLabel *logoLabel;
+    QPushButton *showStatsButton;
 
     // 摄像头窗口
     CameraWindow *cameraWindow;
 
-    // 当前图片路径
+    // 当前路径
     QString currentImagePath;
-    // 当前选择的文件夹路径（用于批量检测）
     QString currentFolderPath;
-    // 当前视频路径
     QString currentVideoPath;
-    // 当前文件夹中的图片列表
     QStringList currentImageList;
-    // 当前图片在列表中的索引
     int currentImageIndex;
 
-    // RKNN相关
-    void* rknn_app_ctx;  // 使用void*指针避免头文件依赖
-    bool rknn_initialized;
+    // 服务类
+    std::unique_ptr<InferenceEngine> inferenceEngine;
+    StatisticsService statisticsService;
+    FileService fileService;
 
     // 视频播放相关
     QMediaPlayer *mediaPlayer;
@@ -125,33 +129,6 @@ private:
     QMutex inferenceMutex;
     QQueue<QVideoFrame> frameQueue;
     QWaitCondition frameCondition;
-
-    // 统计数据结构
-    struct DefectStatistics {
-        int totalImages;                    // 总图片数
-        int imagesWithDefects;              // 有缺陷的图片数
-        QMap<QString, int> defectCounts;   // 各缺陷类型数量
-        QMap<QString, QVector<float>> defectConfidences; // 各缺陷类型的置信度列表
-        QMap<QString, int> defectImageCounts; // 包含各缺陷类型的图片数
-
-        DefectStatistics() : totalImages(0), imagesWithDefects(0) {}
-
-        void clear() {
-            totalImages = 0;
-            imagesWithDefects = 0;
-            defectCounts.clear();
-            defectConfidences.clear();
-            defectImageCounts.clear();
-        }
-    };
-
-    DefectStatistics batchStats;  // 批量检测统计数据
-    QPushButton *showStatsButton;   // 显示统计按钮
-
-    void collectStatistics(const object_detect_result_list &od_results, const QString &imagePath);
-    void showStatistics();
-    QMap<QString, QPair<int, int>> calculateConfidenceDistribution(const QString &defectType) const;
-
-    };
+};
 
 #endif // MAINWINDOW_H

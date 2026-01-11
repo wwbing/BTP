@@ -1,12 +1,12 @@
 # BTP - RKNN 模型推理项目
 
-基于 Rockchip NPU 的高性能 SD-GASNet 目标检测推理实现，专为 RK3588 等嵌入式平台优化。
+基于 Rockchip NPU 的高性能缺陷检测推理实现，专为 RK3588 等嵌入式平台优化。
 
 ## 项目概述
 
 本项目包含两个主要组件：
 
-1. **BTP (缺陷检测)** - 基于 RKNN 的 SD-GASNet 目标检测推理核心
+1. **BTP (缺陷检测核心)** - 基于 RKNN 的 YOLOv6 目标检测推理核心
 2. **HostPC_DefectRKNN** - 桌面 GUI 应用程序，提供图形化界面进行模型推理
 
 项目支持在 RK3588、RK356x、RK3576 和其他 Rockchip 平台上运行各种计算机视觉模型，当前配置用于缺陷检测应用。
@@ -19,6 +19,7 @@
 - 🎯 **缺陷检测优化** - 针对 6 类缺陷检测任务优化
 - 💻 **GUI 应用** - 提供友好的桌面操作界面
 - ⚡ **硬件加速** - 支持 RGA 图像处理加速
+- 🏗️ **清晰架构** - 三层分层架构，UI与业务逻辑分离
 
 ## 目录结构
 
@@ -26,16 +27,59 @@
 BTP/
 ├── rknn_infer/              # 核心推理库
 │   ├── src/                 # 源代码
+│   │   ├── rknpu2/          # RK3588平台实现
+│   │   └── postprocess.cc   # 后处理算法
 │   ├── include/             # 头文件
-│   ├── utils/               # 图像和文件处理工具
-│   └── model/               # RKNN 模型和标签文件
+│   └── utils/               # 图像和文件处理工具
 ├── 3rdparty/                # 第三方依赖库
 │   ├── rknpu2/             # RK3588 NPU 运行时
 │   ├── librga/             # RGA 图像处理库
-│   └── opencv/             # OpenCV 库
+│   └── jpeg_turbo/         # JPEG 编解码库
 ├── HostPC_DefectRKNN/      # 桌面 GUI 应用
+│   ├── include/            # 服务类头文件
+│   │   ├── inferenceengine.h   # 推理引擎
+│   │   ├── imageprocessor.h    # 图像处理
+│   │   ├── statisticsservice.h # 统计服务
+│   │   └── fileservice.h       # 文件服务
+│   ├── src/                # 服务类实现
+│   ├── model/              # 模型文件
+│   └── resources/          # 资源文件
 └── install/                # 构建输出目录
 ```
+
+## HostPC_DefectRKNN 架构
+
+采用三层分层架构：
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      UI 层                                   │
+│  MainWindow (主窗口)  |  CameraWindow (摄像头)  |  StatisticsDialog |
+└─────────────────────────┬───────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│                     服务层                                   │
+│  InferenceEngine  |  ImageProcessor  |  StatisticsService   │
+│  FileService      |  DefectColorManager                     │
+└─────────────────────────┬───────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    底层 RKNN 库                              │
+│  yolov6.cc  |  postprocess.cc  |  image_utils.c             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 服务类职责
+
+| 服务类 | 职责 |
+|--------|------|
+| `InferenceEngine` | 封装 RKNN 推理引擎，RAII 管理资源 |
+| `ImageProcessor` | 图像格式转换、检测框绘制 |
+| `StatisticsService` | 批量检测统计数据收集和计算 |
+| `FileService` | 文件查找、结果保存 |
+| `DefectColorManager` | 6 类缺陷颜色配置 |
 
 ## 支持的平台
 
@@ -53,12 +97,14 @@ BTP/
 
 当前项目配置用于缺陷检测，包含 6 个类别：
 
-- **cr** - 某种缺陷类型
-- **ic** - 某种缺陷类型  
-- **ps** - 某种缺陷类型
-- **rs** - 某种缺陷类型
-- **sc** - 某种缺陷类型
-- **pc** - 某种缺陷类型
+| 类别 | 名称 | 颜色 |
+|------|------|------|
+| cr | 裂纹 | 红色 |
+| ic | 夹杂 | 橙色 |
+| ps | 压痕 | 黄色 |
+| rs | 划痕 | 绿色 |
+| sc | 疤痕 | 蓝色 |
+| pc | 坑点 | 紫色 |
 
 ## 快速开始
 
@@ -67,38 +113,9 @@ BTP/
 - CMake 3.10+
 - 交叉编译工具链 (aarch64-linux-gnu-gcc)
 - RKNN 运行时库 (librknnrt.so、librga.so)
+- Qt5 开发库
 
-### 构建项目
-
-```bash
-# 进入 BTP 目录
-cd BTP
-
-# 默认构建 (RK3588 + aarch64 + Release)
-./build-linux.sh
-
-# 自定义构建选项
-./build-linux.sh -b Debug        # Debug 构建
-./build-linux.sh -b Debug -m    # 启用地址 sanitizer
-./build-linux.sh -r             # 禁用 RGA
-./build-linux.sh -j             # 禁用 libjpeg
-
-# 一键运行（构建+推理）
-./run_neu_det.sh
-```
-
-### 运行推理
-
-```bash
-# 导航到构建输出目录
-cd BTP/install/rk3588_linux_aarch64/rknn_yolov6_demo
-
-# 设置库路径并运行推理
-export LD_LIBRARY_PATH=./lib:$LD_LIBRARY_PATH
-./rknn_yolov6_demo model/neu-det-new.rknn model/neu-det-inclusion_4.jpg
-```
-
-### 运行 GUI 应用
+### 构建 GUI 应用
 
 ```bash
 # 构建桌面应用程序
@@ -108,53 +125,50 @@ cmake ..
 make
 
 # 运行 GUI 应用
+cd BTP/HostPC_DefectRKNN/build
+export LD_LIBRARY_PATH=../3rdparty/rknpu2/Linux/aarch64:../3rdparty/librga/Linux/aarch64:$LD_LIBRARY_PATH
 ./HostPC_DefectRKNN
 ```
 
-## 自定义模型配置
+### 构建命令行工具
 
-### 1. 标签文件配置
+```bash
+# 进入 BTP 目录
+cd BTP
 
-修改 `BTP/rknn_infer/src/postprocess.cc`：
+# 默认构建 (RK3588 + aarch64 + Release)
+./build-linux.sh
+
+# 一键运行（构建+推理）
+./run_neu_det.sh
+```
+
+## GUI 功能
+
+- **单张图片检测** - 选择图片进行缺陷检测
+- **批量检测** - 选择文件夹批量处理图片，结果保存到 `results/` 子目录
+- **视频推理** - 对视频文件进行实时缺陷检测
+- **摄像头检测** - 连接 V4L2 摄像头实时检测
+- **统计分析** - 批量检测后查看统计图表
+
+## 自定义配置
+
+### 1. 模型配置
+
+修改 `HostPC_DefectRKNN/src/inferenceengine.cpp`：
 
 ```cpp
-#define LABEL_NALE_TXT_PATH "./model/your_labels.txt"
+QString modelPath = appPath + "/../model/your-model.rknn";
 ```
 
-### 2. 类别数量配置
+### 2. 缺陷类别颜色
 
-修改 `BTP/rknn_infer/include/postprocess.h`：
+修改 `HostPC_DefectRKNN/src/defect_colors.cpp`：
 
 ```cpp
-#define OBJ_CLASS_NUM N  // 修改为你的类别数量
+// 0: cr - 裂纹 (红色)
+colorConfigs[0].boxColor = QColor(255, 0, 0);
 ```
-
-### 3. CMakeLists.txt 配置
-
-在 `BTP/rknn_infer/CMakeLists.txt` 中更新文件安装路径：
-
-```cmake
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/model/your_labels.txt DESTINATION model)
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/model/your_image.jpg DESTINATION model)
-```
-
-## 核心架构
-
-### 推理管道
-
-1. **模型加载** - 通过 RKNN API 加载量化模型
-2. **图像预处理** - Letterbox 缩放、归一化、格式转换
-3. **NPU 推理** - 在 Rockchip NPU 上执行模型推理
-4. **后处理** - NMS 过滤、边界框解码、置信度阈值
-5. **结果可视化** - 在输出图像上绘制边界框和标签
-
-### 关键模块
-
-- `rknn_app_context_t` - RKNN 模型上下文管理
-- `object_detect_result_list` - 检测结果列表
-- `letterbox_t` - 图像预处理参数
-- 图像处理工具 (`image_utils.c`, `image_drawing.c`)
-- 文件处理工具 (`file_utils.c`)
 
 ## 开发工具
 
@@ -163,15 +177,13 @@ install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/model/your_image.jpg DESTINATION model
 项目已配置生成 `compile_commands.json`，用于 clangd 代码跳转和智能提示：
 
 ```
-BTP/build/build_rknn_yolov6_demo_rk3588_linux_aarch64_Release/compile_commands.json
+BTP/HostPC_DefectRKNN/build/compile_commands.json
+BTP/build/build_rknn_yolov6_demo_*/compile_commands.json
 ```
 
 ### 代码格式化
 
-使用 `.clang-format` 配置文件进行代码格式化，基于 Microsoft 风格：
-- 缩进使用 4 个空格
-- 大括号使用 Allman 风格
-- 列限制设置为 0（无限制）
+使用 `.clang-format` 配置文件进行代码格式化，基于 Microsoft 风格。
 
 ## 许可证
 
@@ -184,5 +196,5 @@ BTP/build/build_rknn_yolov6_demo_rk3588_linux_aarch64_Release/compile_commands.j
 ## 致谢
 
 - Rockchip RKNN 技术支持
-- OpenCV 图像处理库
 - RGA 硬件加速库
+- Qt5 跨平台 GUI 框架

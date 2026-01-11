@@ -24,24 +24,24 @@
 
 QT_CHARTS_USE_NAMESPACE
 
-// 现代配色方案
+// 中性灰色系配色方案 - 与主界面风格一致
 namespace Colors {
-    const QColor PRIMARY = QColor(79, 70, 229);       // 靛蓝
-    const QColor SUCCESS = QColor(16, 185, 129);      // 翠绿
-    const QColor WARNING = QColor(245, 158, 11);      // 琥珀
-    const QColor DANGER = QColor(239, 68, 68);        // 珊瑚红
-    const QColor INFO = QColor(59, 130, 246);         // 天蓝
-    const QColor PURPLE = QColor(139, 92, 246);       // 紫色
-    const QColor CYAN = QColor(6, 182, 212);          // 青色
+    const QColor PRIMARY = QColor(80, 85, 95);       // 深岩灰
+    const QColor SUCCESS = QColor(100, 110, 120);    // 中灰
+    const QColor WARNING = QColor(120, 125, 135);    // 浅岩灰
+    const QColor DANGER = QColor(90, 95, 105);       // 暗灰
+    const QColor INFO = QColor(85, 90, 100);         // 蓝灰
+    const QColor PURPLE = QColor(95, 100, 110);      // 紫灰
+    const QColor CYAN = QColor(88, 93, 103);         // 青灰
 
-    // 渐变色
+    // 柔和的图表配色 - 低饱和度中性色
     const QList<QColor> CHART_COLORS = {
-        QColor(99, 102, 241),   // 靛蓝
-        QColor(236, 72, 153),   // 粉红
-        QColor(16, 185, 129),   // 翠绿
-        QColor(245, 158, 11),   // 琥珀
-        QColor(59, 130, 246),   // 天蓝
-        QColor(139, 92, 246)    // 紫色
+        QColor(110, 115, 125),   // 冷灰
+        QColor(130, 135, 145),   // 中灰
+        QColor(100, 110, 120),   // 暗灰
+        QColor(140, 145, 155),   // 浅灰
+        QColor(120, 125, 135),   // 岩灰
+        QColor(105, 110, 120)    // 深灰
     };
 }
 
@@ -61,25 +61,24 @@ StatisticsDialog::~StatisticsDialog()
 
 void StatisticsDialog::setupUI()
 {
-    // 设置主窗口样式
+    // 设置主窗口样式 - 中性灰色系
     setStyleSheet(R"(
         QDialog {
-            background-color: #f8fafc;
+            background-color: #f5f5f5;
         }
         QPushButton {
-            background-color: #4f46e5;
+            background-color: #808585;
             color: white;
             border: none;
-            border-radius: 8px;
-            padding: 10px 24px;
-            font-size: 14px;
-            font-weight: 600;
+            border-radius: 4px;
+            padding: 8px 20px;
+            font-size: 13px;
         }
         QPushButton:hover {
-            background-color: #4338ca;
+            background-color: #707575;
         }
         QPushButton:pressed {
-            background-color: #3730a3;
+            background-color: #606565;
         }
     )");
 
@@ -94,13 +93,13 @@ void StatisticsDialog::setupUI()
 
     QLabel *titleLabel = new QLabel("缺陷检测统计分析报告");
     QFont titleFont = titleLabel->font();
-    titleFont.setPointSize(20);
+    titleFont.setPointSize(18);
     titleFont.setBold(true);
     titleLabel->setFont(titleFont);
-    titleLabel->setStyleSheet("color: #1e293b;");
+    titleLabel->setStyleSheet("color: #444;");
 
     QLabel *subtitleLabel = new QLabel("智能质量检测系统 | 批量检测结果");
-    subtitleLabel->setStyleSheet("color: #64748b; font-size: 13px;");
+    subtitleLabel->setStyleSheet("color: #777; font-size: 12px;");
 
     QVBoxLayout *titleTextLayout = new QVBoxLayout();
     titleTextLayout->addWidget(titleLabel);
@@ -130,20 +129,20 @@ void StatisticsDialog::setupUI()
     QPushButton *exportButton = new QPushButton("导出报告");
     exportButton->setStyleSheet(R"(
         QPushButton {
-            background-color: #10b981;
+            background-color: #909595;
         }
         QPushButton:hover {
-            background-color: #059669;
+            background-color: #808585;
         }
     )");
 
     QPushButton *closeButton = new QPushButton("关闭");
     closeButton->setStyleSheet(R"(
         QPushButton {
-            background-color: #64748b;
+            background-color: #a0a5a5;
         }
         QPushButton:hover {
-            background-color: #475569;
+            background-color: #909595;
         }
     )");
     connect(closeButton, &QPushButton::clicked, this, &StatisticsDialog::close);
@@ -240,7 +239,7 @@ QWidget* StatisticsDialog::createKpiCard(const QString &title, const QString &va
                                   .arg(accentColor.blue())));
 
     QLabel *titleLabel = new QLabel(title);
-    titleLabel->setStyleSheet("color: #64748b; font-size: 13px; font-weight: 500;");
+    titleLabel->setStyleSheet("color: #777; font-size: 12px;");
 
     headerLayout->addWidget(iconLabel);
     headerLayout->addWidget(titleLabel, 1);
@@ -258,7 +257,7 @@ QWidget* StatisticsDialog::createKpiCard(const QString &title, const QString &va
                                   .arg(accentColor.blue())));
 
     QLabel *unitLabel = new QLabel(unit);
-    unitLabel->setStyleSheet("color: #94a3b8; font-size: 14px; font-weight: 500;");
+    unitLabel->setStyleSheet("color: #999; font-size: 13px;");
     unitLabel->setAlignment(Qt::AlignBottom);
 
     valueLayout->addWidget(valueLabel);
@@ -293,22 +292,22 @@ QWidget* StatisticsDialog::createChartCard(const QString &title, QWidget *chartW
     card->setStyleSheet(R"(
         QFrame {
             background-color: white;
-            border-radius: 16px;
-            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            border: 1px solid #ddd;
         }
     )");
 
     QVBoxLayout *cardLayout = new QVBoxLayout(card);
-    cardLayout->setContentsMargins(20, 16, 20, 16);
-    cardLayout->setSpacing(12);
+    cardLayout->setContentsMargins(16, 12, 16, 12);
+    cardLayout->setSpacing(8);
 
     // 标题
     QLabel *titleLabel = new QLabel(title);
     QFont titleFont = titleLabel->font();
-    titleFont.setPointSize(14);
+    titleFont.setPointSize(13);
     titleFont.setBold(true);
     titleLabel->setFont(titleFont);
-    titleLabel->setStyleSheet("color: #1e293b; padding-left: 8px; border-left: 4px solid #4f46e5;");
+    titleLabel->setStyleSheet("color: #555; padding-left: 6px; border-left: 3px solid #888;");
 
     cardLayout->addWidget(titleLabel);
     cardLayout->addWidget(chartWidget, 1);
@@ -352,11 +351,11 @@ QWidget* StatisticsDialog::createDefectPieChart()
         }
         slice->setLabelVisible(true);
         slice->setLabelPosition(QPieSlice::LabelPosition::LabelOutside);
-        slice->setLabelBrush(QBrush(QColor(51, 65, 85)));
+        slice->setLabelBrush(QBrush(QColor(80, 85, 95)));
 
         QFont labelFont = slice->labelFont();
-        labelFont.setPointSize(11);
-        labelFont.setBold(true);
+        labelFont.setPointSize(10);
+        labelFont.setBold(false);
         slice->setLabelFont(labelFont);
 
         colorIndex++;
@@ -416,15 +415,15 @@ QWidget* StatisticsDialog::createDefectBarChart()
     QBarCategoryAxis *axis = new QBarCategoryAxis();
     axis->append(categories);
     axis->setGridLineVisible(false);
-    axis->setLabelsColor(QColor(71, 85, 105));
-    axis->setLabelsFont(QFont("Arial", 10));
+    axis->setLabelsColor(QColor(100, 105, 115));
+    axis->setLabelsFont(QFont("Arial", 9));
     chart->addAxis(axis, Qt::AlignBottom);
     series->attachAxis(axis);
 
     QValueAxis *valueAxis = new QValueAxis();
     valueAxis->setGridLineVisible(true);
-    valueAxis->setGridLineColor(QColor(241, 245, 249));
-    valueAxis->setLabelsColor(QColor(71, 85, 105));
+    valueAxis->setGridLineColor(QColor(240, 240, 240));
+    valueAxis->setLabelsColor(QColor(100, 105, 115));
     chart->addAxis(valueAxis, Qt::AlignLeft);
     series->attachAxis(valueAxis);
 
@@ -490,14 +489,14 @@ QWidget* StatisticsDialog::createConfidenceChart()
     QBarCategoryAxis *axis = new QBarCategoryAxis();
     axis->append(categories);
     axis->setGridLineVisible(false);
-    axis->setLabelsColor(QColor(71, 85, 105));
+    axis->setLabelsColor(QColor(100, 105, 115));
     chart->addAxis(axis, Qt::AlignBottom);
     series->attachAxis(axis);
 
     QValueAxis *valueAxis = new QValueAxis();
     valueAxis->setGridLineVisible(true);
-    valueAxis->setGridLineColor(QColor(241, 245, 249));
-    valueAxis->setLabelsColor(QColor(71, 85, 105));
+    valueAxis->setGridLineColor(QColor(240, 240, 240));
+    valueAxis->setLabelsColor(QColor(100, 105, 115));
     chart->addAxis(valueAxis, Qt::AlignLeft);
     series->attachAxis(valueAxis);
 
@@ -511,10 +510,10 @@ QWidget* StatisticsDialog::createConfidenceChart()
     // 统计信息
     QLabel *statsLabel = new QLabel();
     QString statsText = QString(
-        "总样本: <b style='color: #4f46e5;'>%1</b> | "
-        "平均: <b style='color: #10b981;'>%2</b> | "
-        "最高: <b style='color: #059669;'>%3</b> | "
-        "最低: <b style='color: #dc2626;'>%4</b>"
+        "总样本: <b style='color: #707575;'>%1</b> | "
+        "平均: <b style='color: #707575;'>%2</b> | "
+        "最高: <b style='color: #707575;'>%3</b> | "
+        "最低: <b style='color: #707575;'>%4</b>"
     ).arg(allConfidences.size())
      .arg(calculateAverageConfidence(allConfidences), 0, 'f', 3)
      .arg(*std::max_element(allConfidences.begin(), allConfidences.end()), 0, 'f', 3)
@@ -523,12 +522,11 @@ QWidget* StatisticsDialog::createConfidenceChart()
     statsLabel->setText(statsText);
     statsLabel->setStyleSheet(
         "QLabel { "
-        "padding: 12px 16px; "
-        "background: qlineargradient(x1:0, y1:0, x2:1, y2:0, "
-        "stop:0 rgba(79, 70, 229, 0.08), stop:1 rgba(16, 185, 129, 0.08)); "
-        "border-radius: 8px; "
-        "color: #475569; "
-        "font-size: 13px; "
+        "padding: 10px 14px; "
+        "background-color: #f0f0f0; "
+        "border-radius: 4px; "
+        "color: #666; "
+        "font-size: 12px; "
         "}"
     );
     layout->addWidget(statsLabel);
@@ -550,25 +548,25 @@ QWidget* StatisticsDialog::createDefectDetailsTable()
         QTableWidget {
             background-color: transparent;
             border: none;
-            gridline-color: #f1f5f9;
-            font-size: 13px;
+            gridline-color: #eee;
+            font-size: 12px;
         }
         QTableWidget::item {
-            padding: 8px;
+            padding: 6px;
             border: none;
-            border-bottom: 1px solid #f1f5f9;
+            border-bottom: 1px solid #eee;
         }
         QHeaderView::section {
-            background-color: #f8fafc;
-            color: #475569;
-            padding: 12px 8px;
+            background-color: #f5f5f5;
+            color: #666;
+            padding: 8px 6px;
             border: none;
-            border-bottom: 2px solid #e2e8f0;
-            font-weight: 600;
-            font-size: 13px;
+            border-bottom: 1px solid #ddd;
+            font-weight: 500;
+            font-size: 12px;
         }
         QTableWidget::item:selected {
-            background-color: rgba(79, 70, 229, 0.1);
+            background-color: rgba(120, 125, 125, 0.15);
         }
     )");
 
@@ -609,7 +607,7 @@ QWidget* StatisticsDialog::createDefectDetailsTable()
          .arg(Colors::CHART_COLORS[colorIdx].blue()));
 
         QLabel *typeLabel = new QLabel(defectType);
-        typeLabel->setStyleSheet("color: #1e293b; font-weight: 600;");
+        typeLabel->setStyleSheet("color: #555;");
 
         typeLayout->addWidget(colorDot);
         typeLayout->addWidget(typeLabel);
@@ -626,7 +624,7 @@ QWidget* StatisticsDialog::createDefectDetailsTable()
             QTableWidgetItem *item = table->item(row, col);
             if (item) {
                 item->setTextAlignment(Qt::AlignCenter);
-                item->setForeground(QColor(51, 65, 85));
+                item->setForeground(QColor(100, 105, 115));
             }
         }
 
@@ -653,8 +651,8 @@ QWidget* StatisticsDialog::createEmptyWidget(const QString &message)
     QLabel *label = new QLabel(message);
     label->setAlignment(Qt::AlignCenter);
     label->setStyleSheet(
-        "color: #94a3b8; font-size: 14px; padding: 40px; "
-        "background-color: #f8fafc; border-radius: 8px; border: 2px dashed #e2e8f0;"
+        "color: #999; font-size: 13px; padding: 30px; "
+        "background-color: #f8f8f8; border-radius: 4px; border: 1px dashed #ccc;"
     );
     return label;
 }
@@ -724,12 +722,11 @@ QString StatisticsDialog::getCardStyle(const QColor &accentColor) const {
     return QString(R"(
         QFrame {
             background-color: white;
-            border-radius: 16px;
-            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            border: 1px solid #ddd;
         }
         QFrame:hover {
-            border: 1px solid rgba(%1, %2, %3, 50);
-            box-shadow: 0 4px 20px rgba(%1, %2, %3, 15);
+            border: 1px solid rgba(%1, %2, %3, 80);
         }
     )").arg(accentColor.red())
          .arg(accentColor.green())
@@ -738,10 +735,10 @@ QString StatisticsDialog::getCardStyle(const QColor &accentColor) const {
 
 QString StatisticsDialog::getSectionTitleStyle() const {
     return R"(
-        color: #1e293b;
-        font-size: 16px;
-        font-weight: 600;
-        padding-left: 12px;
-        border-left: 4px solid #4f46e5;
+        color: #555;
+        font-size: 14px;
+        font-weight: 500;
+        padding-left: 8px;
+        border-left: 3px solid #888;
     )";
 }

@@ -10,7 +10,7 @@
 
 #include <set>
 #include <vector>
-#define LABEL_NALE_TXT_PATH "../model/neu-det_6_labels_list.txt"
+#define LABEL_NALE_TXT_PATH "model/neu-det_6_labels_list.txt"
 
 static char *labels[OBJ_CLASS_NUM];
 
@@ -741,18 +741,22 @@ int init_post_process()
 
 char *coco_cls_to_name(int cls_id)
 {
+    // 缺陷检测类别名称（硬编码）
+    static const char *defect_names[] = {
+        "cr",   // 0: 裂纹
+        "ic",   // 1: 夹杂
+        "ps",   // 2: 压痕
+        "rs",   // 3: 划痕
+        "sc",   // 4: 疤痕
+        "pc"    // 5: 坑点
+    };
 
-    if (cls_id >= OBJ_CLASS_NUM)
+    if (cls_id >= OBJ_CLASS_NUM || cls_id < 0)
     {
         return "null";
     }
 
-    if (labels[cls_id])
-    {
-        return labels[cls_id];
-    }
-
-    return "null";
+    return (char*)defect_names[cls_id];
 }
 
 void deinit_post_process()
